@@ -1,0 +1,534 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
+import api from '../utils/api.js';
+import { uploadUnsigned } from '../utils/cloudinary.js';
+import { isSameDay, formatChatDate, formatLastSeen } from '../utils/time.js';
+import MessageBubble from '../components/chat/MessageBubble.jsx';
+import MessageInput from '../components/chat/MessageInput.jsx';
+import DateSeparator from '../components/chat/DateSeparator.jsx';
+import TypingIndicator from '../components/chat/TypingIndicator.jsx';
+import { StatusViewer, SegmentedCircle } from '../components/status/StatusViewer.jsx';
+import {
+  LogOut, Sun, Moon, Search, Shield,
+  Ban, BellOff, Trash2, Plus, Upload, Settings,
+  Image as ImageIcon, Film, Type, ChevronLeft,
+  MessageCircle, CircleDashed, Filter
+} from 'lucide-react';
+
+const notify = (title, body, icon) => {
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body, icon });
+  }
+};
+
+function ChatRow({ chat, selected, onClick }) {
+  const unread = chat.unreadCount;
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-3 transition hover:bg-gray-100 dark:hover:bg-[#202C33] ${selected ? 'bg-gray-100 dark:bg-[#2A3942]' : ''}`}>
+      <div className="relative w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+        {chat.userProfilePicture
+          ? <img src={chat.userProfilePicture} className="w-full h-full object-cover" alt="" />
+          : <div className="w-full h-full flex items-center justify-center font-bold text-white text-sm" style={{ backgroundColor: `hsl(${(chat.userId * 47) % 360}, 60%, 50%)` }}>
+              {chat.userName?.[0]?.toUpperCase()}
+            </div>
+        }
+      </div>
+      <div className="flex-1 min-w-0 text-left">
+        <div className="flex justify-between items-baseline mb-0.5">
+          <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{chat.userName}</p>
+          <span className={`text-[11px] flex-shrink-0 ml-1 ${unread > 0 ? 'text-green-500 font-bold' : 'text-gray-400'}`}>
+            {formatChatDate(chat.lastMessageAt)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]">
+             {chat.userIsBlocked ? <span className="text-red-500">🚫 Blocked</span> : (chat.lastMessage || 'No messages')}
+          </p>
+          {unread > 0 && (
+            <span className="ml-1 flex-shrink-0 text-[10px] bg-green-500 text-[#111B21] rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 font-bold">
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ChatRowSkeleton() {
+  return (
+    <div className="w-full flex items-center gap-3 px-4 py-3 opacity-60">
+      <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse flex-shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="flex justify-between items-center">
+          <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+          <div className="h-2 w-8 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+        </div>
+        <div className="h-2 w-32 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
+      </div>
+    </div>
+  );
+}
+
+function StatusUploadModal({ onClose, onCreated }) {
+  const [type, setType]       = useState('text');
+  const [text, setText]       = useState('');
+  const [bg, setBg]           = useState('#128C7E');
+  const [file, setFile]       = useState(null);
+  const [caption, setCaption] = useState('');
+  const [duration, setDur]    = useState(1);
+  const [loading, setLoad]    = useState(false);
+  const fileRef = useRef();
+
+  const submit = async () => {
+    setLoad(true);
+    try {
+      let mediaUrl = null;
+      if (type !== 'text' && file) {
+        const { url } = await uploadUnsigned(file, type);
+        mediaUrl = url;
+      }
+      const { data } = await api.post('/statuses', {
+        contentType: type, mediaUrl, textContent: type === 'text' ? text : null,
+        caption, backgroundColor: bg, duration,
+      });
+      onCreated(data.status);
+      onClose();
+    } catch (e) {
+      alert('Failed: ' + e.message);
+    } finally {
+      setLoad(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-[#202C33] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border)] bg-gray-50 dark:bg-[#2A3942]">
+          <h3 className="font-semibold text-gray-900 dark:text-white">New Status Update</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex gap-2">
+            {[['text', 'Text', <Type size={16}/>], ['image', 'Image', <ImageIcon size={16}/>], ['video', 'Video', <Film size={16}/>]].map(([t, label, icon]) => (
+              <button key={t} onClick={() => setType(t)}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border-2 transition ${type === t ? 'border-green-500 bg-green-50 dark:bg-green-500/10 text-green-600' : 'border-gray-100 dark:border-gray-700 text-gray-500'}`}>
+                {icon} {label}
+              </button>
+            ))}
+          </div>
+          {type === 'text' ? (
+            <div className="space-y-3">
+              <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Type something..."
+                className="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#111B21] text-gray-900 dark:text-white resize-none h-32 text-center text-xl font-medium focus:outline-none" style={{ backgroundColor: bg + '22', color: bg }} />
+              <div className="flex gap-2 items-center justify-center">
+                <p className="text-sm text-gray-500">Pick Background:</p>
+                {['#128C7E', '#075E54', '#34B7F1', '#EC2B1F', '#F98E1D'].map(c => (
+                   <button key={c} onClick={() => setBg(c)} className={`w-8 h-8 rounded-full border-2 ${bg === c ? 'border-gray-900' : 'border-transparent'}`} style={{backgroundColor: c}}/>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <button onClick={() => fileRef.current.click()}
+                className="w-full border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl py-12 flex flex-col items-center gap-3 text-gray-400 hover:border-green-500 hover:text-green-500 transition-all bg-gray-50 dark:bg-[#111B21]">
+                <Upload size={32} />
+                <span className="text-sm font-medium">{file ? file.name : `Select ${type} file`}</span>
+              </button>
+              <input ref={fileRef} type="file" accept={type === 'image' ? 'image/*' : 'video/*'} className="hidden" onChange={e => setFile(e.target.files[0])} />
+              <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Add a caption..."
+                className="w-full mt-4 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#111B21] text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 p-5 bg-gray-50 dark:bg-[#2A3942]/50 border-t border-[var(--border)]">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 transition">Discard</button>
+          <button onClick={submit} disabled={loading || (type !== 'text' && !file) || (type === 'text' && !text.trim())}
+            className="flex-1 py-2.5 rounded-xl text-[#111B21] font-bold disabled:opacity-50 transition bg-green-500 hover:bg-green-400 shadow-lg shadow-green-500/20">
+            {loading ? 'Posting...' : 'Share Update'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Admin() {
+  const { user, logout }       = useAuth();
+  const { emit, on, isConnected } = useSocket();
+  const { dark, toggle }       = useTheme();
+  const navigate               = useNavigate();
+
+  const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'status' | 'settings'
+  const [chats, setChats]           = useState([]);
+  const [selectedChat, setSelected] = useState(null);
+  const [messages, setMessages]     = useState([]);
+  const [statuses, setStatuses]     = useState([]);
+  const [search, setSearch]         = useState('');
+  const [typing, setTyping]         = useState(false);
+  const [loading, setLoading]       = useState(true);
+  const [msgLoading, setMsgLoad]    = useState(false);
+  const [showStatusModal, setShowModal] = useState(false);
+  const [viewStatus, setViewStatus] = useState(null);
+  const [welcomeMsg, setWelcome]     = useState('');
+  const [isEditingWelcome, setEditingWelcome] = useState(false);
+  const [tempWelcome, setTempWelcome] = useState('');
+  const [sidebarOpen, setSidebar]   = useState(true);
+  const [hasMore, setHasMore]       = useState(true);
+  const [loadingMore, setLoadMore]  = useState(false);
+
+  const bottomRef   = useRef();
+  const typingTimer = useRef();
+  const selectedChatRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const skipRef     = useRef(0);
+  const lastMsgId = useRef(null);
+  const isInitialLoad = useRef(true);
+  const lastChatId = useRef(null);
+
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
+
+  useEffect(() => {
+    if (Notification.permission === 'default') Notification.requestPermission();
+    const init = async () => {
+      try {
+        const [chatRes, statusRes, welcomeRes] = await Promise.all([
+          api.get('/chats'), api.get('/statuses'), api.get('/welcome'),
+        ]);
+        setChats(chatRes.data.chats);
+        setStatuses(statusRes.data.statuses);
+        setWelcome(welcomeRes.data.message);
+      } catch (err) { console.error(err); } finally { setLoading(false); }
+    };
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (messages.length > 0 && selectedChat) {
+      const latestMsg = messages[messages.length - 1];
+      const isNewMessage = latestMsg.id !== lastMsgId.current;
+      
+      if (isNewMessage || isInitialLoad.current) {
+        const behavior = isInitialLoad.current ? 'auto' : 'smooth';
+        const timer = setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior });
+        }, 50);
+        lastMsgId.current = latestMsg.id;
+        isInitialLoad.current = false;
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [messages, selectedChat?.id]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    if (selectedChatRef.current) emit('join-chat', { chatId: selectedChatRef.current.id });
+
+    const offMsg = on('receive-message', (msg) => {
+      if (selectedChatRef.current?.id === msg.chatId) {
+        setMessages(prev => [...prev, msg]);
+        emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+      } else if (msg.senderId !== user.id) {
+        notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+      }
+      setChats(prev => {
+        const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: selectedChatRef.current?.id === msg.chatId ? 0 : c.unreadCount + 1 } : c);
+        return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+      });
+    });
+
+    const offRead = on('message-read', ({ messageIds, chatId }) => {
+      if (selectedChatRef.current?.id === chatId) setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
+    });
+
+    const offTyping = on('user-typing', ({ userId }) => {
+      if (selectedChatRef.current?.userId === userId) {
+        setTyping(true);
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setTyping(false), 3000);
+      }
+    });
+
+    const offStopTyping = on('user-stop-typing', () => setTyping(false));
+
+    return () => { offMsg(); offRead(); offTyping(); offStopTyping(); };
+  }, [on, emit, user.id, isConnected]);
+
+  const updateWelcome = async () => {
+    try {
+      await api.put('/welcome', { message: tempWelcome });
+      setWelcome(tempWelcome);
+      setEditingWelcome(false);
+    } catch (e) { alert('Update failed'); }
+  };
+
+  const openChat = async (chat) => {
+    setSelected(chat);
+    setSidebar(false);
+    setMsgLoad(true);
+    setHasMore(true);
+    skipRef.current = 0;
+    isInitialLoad.current = true;
+    try {
+      const res = await api.get(`/chats/${chat.id}/messages`, { params: { limit: 50, skip: 0 } });
+      setMessages(res.data.messages);
+      skipRef.current = res.data.messages.length;
+      if (res.data.messages.length < 50) setHasMore(false);
+      
+      await api.patch(`/chats/${chat.id}/read`);
+      setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
+      emit('join-chat', { chatId: chat.id });
+      emit('message-read', { chatId: chat.id, messageIds: res.data.messages.filter(m => !m.isRead && m.senderId !== user.id).map(m => m.id) });
+    } catch (err) { console.error(err); } finally { setMsgLoad(false); }
+  };
+
+  const loadMore = async () => {
+    if (!selectedChat || msgLoading || loadingMore || !hasMore) return;
+    setLoadMore(true);
+    const scrollContainer = chatContainerRef.current;
+    const oldHeight = scrollContainer?.scrollHeight || 0;
+
+    try {
+      const res = await api.get(`/chats/${selectedChat.id}/messages`, { params: { limit: 50, skip: skipRef.current } });
+      const older = res.data.messages;
+      if (older.length > 0) {
+        setMessages(prev => [...older, ...prev]);
+        skipRef.current += older.length;
+        setTimeout(() => {
+          if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight - oldHeight;
+        }, 0);
+      }
+      if (older.length < 50) setHasMore(false);
+    } catch (err) { console.error(err); } finally { setLoadMore(false); }
+  };
+
+  const handleSend = useCallback(async (data) => {
+    if (!selectedChat) return;
+    emit('send-message', { chatId: selectedChat.id, ...data }, (res) => {
+      if (res?.message) {
+        setMessages(prev => prev.some(m => m.id === res.message.id) ? prev : [...prev, { ...res.message, senderId: user.id }]);
+      } else if (res?.error) {
+        toast.error(res.error);
+      }
+    });
+  }, [selectedChat, emit, user.id]);
+
+  const handleTyping = useCallback(() => {
+    if (!selectedChat) return;
+    if (!typingTimer.current) { emit('typing', { chatId: selectedChat.id }); }
+    clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => { typingTimer.current = null; emit('stop-typing', { chatId: selectedChat.id }); }, 2000);
+  }, [selectedChat, emit]);
+
+  const toggleBlock = async (userId) => {
+    const { data } = await api.patch(`/users/${userId}/block`);
+    setChats(prev => prev.map(c => c.userId === userId ? { ...c, userIsBlocked: data.user.isBlocked } : c));
+    setSelected(prev => prev?.userId === userId ? { ...prev, userIsBlocked: data.user.isBlocked } : prev);
+  };
+
+  const deleteUser = async (userId) => {
+    if (!confirm('Delete this user?')) return;
+    await api.delete(`/users/${userId}`);
+    setChats(prev => prev.filter(c => c.userId !== userId));
+    if (selectedChat?.userId === userId) { setSelected(null); setMessages([]); }
+  };
+
+  const filtered = chats.filter(c => c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search));
+
+  return (
+    <div className="flex h-screen overflow-hidden font-sans bg-[var(--bg)] relative">
+      {/* 1. NAV RAIL (Sidebar on Desktop, Bottom Bar on Mobile) */}
+      <div className={`${(selectedChat && !sidebarOpen) ? 'hidden md:flex' : 'flex'} fixed bottom-0 left-0 right-0 h-16 md:relative md:h-screen md:w-16 flex md:flex-col items-center justify-around md:justify-start py-0 md:py-4 gap-0 md:gap-4 bg-gray-100 dark:bg-[#111B21] border-t md:border-t-0 md:border-r border-[#2A3942] z-30 transition-all duration-300`}>
+         <div className="hidden md:flex w-10 h-10 rounded-full bg-green-500 items-center justify-center text-[#111B21] font-black mb-4">AD</div>
+         <button onClick={() => setActiveTab('chats')} className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 ${activeTab === 'chats' ? 'bg-gray-200 dark:bg-[#2A3942] text-green-500' : 'text-gray-500'}`}>
+            <MessageCircle size={24}/>
+            <span className="text-[10px] md:hidden font-bold">Chats</span>
+         </button>
+         <button onClick={() => setActiveTab('status')} className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 ${activeTab === 'status' ? 'bg-gray-200 dark:bg-[#2A3942] text-green-500' : 'text-gray-500'}`}>
+            <CircleDashed size={24}/>
+            <span className="text-[10px] md:hidden font-bold">Status</span>
+         </button>
+         <button onClick={() => setActiveTab('settings')} className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 ${activeTab === 'settings' ? 'bg-gray-200 dark:bg-[#2A3942] text-green-500' : 'text-gray-500'}`}>
+            <Settings size={24}/>
+            <span className="text-[10px] md:hidden font-bold">Settings</span>
+         </button>
+         <div className="hidden md:flex mt-auto flex-col gap-4">
+            <button onClick={toggle} className="p-3 text-gray-500 hover:text-green-400">{dark ? <Sun size={24}/> : <Moon size={24}/>}</button>
+            <button onClick={() => {logout(); navigate('/admin/login');}} className="p-3 text-gray-500 hover:text-red-500"><LogOut size={24}/></button>
+         </div>
+      </div>
+
+      {/* 2. SIDEBAR CONTENT */}
+      <div className={`${(selectedChat && !sidebarOpen) ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 lg:w-96 bg-white dark:bg-[#111B21] border-r border-[#2A3942] flex-shrink-0 animate-in fade-in duration-300 z-20 pb-16 md:pb-0`}>
+         {activeTab === 'chats' && (
+           <>
+              <div className="flex items-center justify-between px-4 py-4 pt-6">
+                 <h2 className="text-2xl font-bold dark:text-white">Admin</h2>
+                 {/* <button className="p-2 dark:text-gray-400"><Filter size={18}/></button> */}
+              </div>
+              <div className="px-4 mb-2">
+                 <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search chats..." className="w-full bg-gray-100 dark:bg-[#202C33] text-sm py-2 pl-10 pr-4 rounded-xl dark:text-white focus:outline-none"/>
+                 </div>
+              </div>
+               <div className="flex-1 overflow-y-auto">
+                  {loading ? (
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {[1,2,3,4,5,6].map(i => <ChatRowSkeleton key={i} />)}
+                    </div>
+                  ) : filtered.map(chat => (
+                    <ChatRow key={chat.id} chat={chat} selected={selectedChat?.id === chat.id} onClick={() => openChat(chat)} />
+                  ))}
+               </div> 
+           </>
+         )}
+
+         {activeTab === 'status' && (
+           <>
+              <div className="px-5 py-6">
+                 <h2 className="text-2xl font-bold dark:text-white mb-6">Status</h2>
+                 <button onClick={() => setShowModal(true)} className="w-full flex items-center gap-4 p-3 hover:bg-gray-100 dark:hover:bg-[#202C33] rounded-2xl transition">
+                    <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-[#111B21]"><Plus size={24}/></div>
+                    <div className="text-left">
+                       <p className="font-bold dark:text-white">My Status</p>
+                       <p className="text-xs text-gray-500">Tap to add your update</p>
+                    </div>
+                 </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5">
+                 <p className="text-xs font-bold text-green-500 uppercase tracking-widest mb-4">Current Stories</p>
+                 {Object.values(statuses.reduce((acc, s) => {
+                     if (!acc[s.userId]) acc[s.userId] = [];
+                     acc[s.userId].push(s);
+                     return acc;
+                  }, {})).map((group, groupIdx) => {
+                     const first = group[0];
+                     const viewedCount = group.filter(s => s.isViewed).length;
+                     const startIndex = statuses.findIndex(s => s.id === first.id);
+                     
+                     return (
+                        <button key={first.userId} onClick={() => setViewStatus(startIndex)} className="w-full flex items-center gap-4 py-3 border-b border-[#2A3942]/10 group">
+                           <div className="relative w-14 h-14 flex-shrink-0">
+                              <SegmentedCircle count={group.length} viewedCount={viewedCount} size={56} />
+                              <div className="absolute inset-0 m-auto w-[46px] h-[46px] rounded-full overflow-hidden bg-white dark:bg-[#111B21] p-[1px]">
+                                 {first.userProfilePicture ? (
+                                    <img src={first.userProfilePicture} className="w-full h-full object-cover rounded-full" alt="" />
+                                 ) : (
+                                    <div className="w-full h-full bg-gray-700 rounded-full flex items-center justify-center text-white">
+                                       <CircleDashed size={20}/>
+                                    </div>
+                                 )}
+                              </div>
+                           </div>
+                           <div className="text-left flex-1 min-w-0">
+                              <p className="font-bold dark:text-white truncate group-hover:text-green-500 transition-colors">{first.userName}</p>
+                              <p className="text-xs text-gray-500">{formatChatDate(first.createdAt)}</p>
+                           </div>
+                        </button>
+                     );
+                  })}
+                  {statuses.length === 0 && <p className="text-sm text-gray-500 italic">No active stories</p>}
+              </div>
+           </>
+         )}
+
+         {activeTab === 'settings' && (
+           <div className="px-6 py-6">
+              <h2 className="text-2xl font-bold dark:text-white mb-6">Settings</h2>
+              <div className="space-y-6">
+                  <div className="bg-gray-50 dark:bg-[#202C33] p-6 rounded-3xl border border-[var(--border)] shadow-sm">
+                     <p className="text-[11px] font-bold text-green-500 uppercase mb-3 tracking-widest">Automatic Welcome Message</p>
+                     
+                     {isEditingWelcome ? (
+                        <div className="space-y-4">
+                           <textarea 
+                              value={tempWelcome} 
+                              onChange={e => setTempWelcome(e.target.value)}
+                              className="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111B21] text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                              rows={4}
+                           />
+                           <div className="flex gap-2">
+                              <button onClick={updateWelcome} className="flex-1 py-2 bg-green-500 text-white rounded-xl font-bold text-sm hover:bg-green-600 transition">Save Changes</button>
+                              <button onClick={() => setEditingWelcome(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-sm hover:bg-gray-300 transition">Cancel</button>
+                           </div>
+                        </div>
+                     ) : (
+                        <>
+                           <p className="text-[15px] text-gray-700 dark:text-gray-200 italic mb-6 leading-relaxed line-clamp-4">"{welcomeMsg || 'No welcome message set.'}"</p>
+                           <button 
+                              onClick={() => { setTempWelcome(welcomeMsg); setEditingWelcome(true); }} 
+                              className="flex items-center gap-2 text-[12px] font-bold text-green-500 hover:text-green-400 transition group"
+                           >
+                              <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
+                              EDIT WELCOME MESSAGE
+                           </button>
+                        </>
+                     )}
+                  </div>
+              </div>
+           </div>
+         )}
+      </div>
+
+      {/* 3. CHAT AREA */}
+      <div className={`${(selectedChat && !sidebarOpen) ? 'flex' : 'hidden md:flex'} flex-1 flex flex-col chat-bg min-w-0 h-full relative pb-0 md:pb-0`}>
+         {selectedChat ? (
+           <>
+              <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-b border-[#2A3942] z-10 shadow-lg">
+                 <button onClick={() => setSidebar(true)} className="md:hidden p-1 text-gray-400">
+                     <ChevronLeft size={24}/>
+                 </button>
+                 <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold">{selectedChat.userName[0]}</div>
+                 <div className="flex-1 min-w-0"><p className="font-bold text-white truncate">{selectedChat.userName}</p></div>
+                 <button onClick={() => toggleBlock(selectedChat.userId)} className={`p-2 rounded-full ${selectedChat.userIsBlocked ? 'text-red-500' : 'text-gray-400 font-bold'}`}><Ban size={18}/></button>
+                 <button onClick={() => deleteUser(selectedChat.userId)} className="p-2 rounded-full text-red-500"><Trash2 size={18}/></button>
+              </div>
+               <div className="flex-1 relative overflow-hidden flex flex-col">
+                  {msgLoading && (
+                     <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-[#0B141A]/60 backdrop-blur-md z-30 animate-in fade-in duration-300">
+                        <div className="spinner" />
+                     </div>
+                  )}
+                  <div 
+                      ref={chatContainerRef}
+                      className="flex-1 overflow-y-auto px-4 py-5 flex flex-col custom-scrollbar"
+                      onScroll={e => { if (e.target.scrollTop < 100) loadMore(); }}
+                  >
+                     <div className="flex-1" />
+                     {loadingMore && (
+                        <div className="flex justify-center items-center py-4 animate-in fade-in zoom-in duration-300">
+                           <div className="spinner-sm" />
+                           <span className="ml-2 text-[11px] text-gray-500 font-bold uppercase tracking-wider">Fetching more messages...</span>
+                        </div>
+                     )}
+                     {messages.map((msg, i) => {
+                        const prevMsg = messages[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
+                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg}/></div>);
+                     })}
+                     {typing && <TypingIndicator name="User"/>}
+                     <div ref={bottomRef} className="h-4"/>
+                  </div>
+               </div>
+              <div onKeyDown={handleTyping} className="p-1"><MessageInput onSend={handleSend} disabled={selectedChat.userIsBlocked} chatId={selectedChat.id} /></div>
+           </>
+         ) : (
+           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <h2 className="text-2xl font-bold dark:text-white">Admin Dashboard</h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-sm">Select a chat from the sidebar to manage conversations.</p>
+           </div>
+         )}
+      </div>
+
+      {showStatusModal && <StatusUploadModal onClose={() => setShowModal(false)} onCreated={s => setStatuses(prev => [s, ...prev])}/>}
+      {viewStatus !== null && <StatusViewer statuses={statuses.filter(s => activeTab === 'chats' ? true : true)} startIndex={viewStatus} onClose={() => setViewStatus(null)} />}
+    </div>
+  );
+}

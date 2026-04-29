@@ -1,0 +1,16 @@
+{
+  "name": "chat-dofordollar",
+  "version": "1.0.0",
+  "description": "Admin-controlled real-time chat application",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"server,client\" -c \"cyan,green\" \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client",
+    "db:push": "npm run db:push --prefix server",
+    "seed": "npm run seed --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
