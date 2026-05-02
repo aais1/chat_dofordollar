@@ -5,12 +5,22 @@ import { eq, desc, asc, lt, and, sql, inArray } from 'drizzle-orm';
 // GET /api/chats/my-chat  (user)
 export const getMyChat = async (req, res) => {
   try {
-    const [chat] = await db.select().from(chats).where(eq(chats.userId, req.user.id));
-    if (!chat) return res.status(404).json({ message: 'Chat not found' });
-    const [admin] = await db.select({
-      id: users.id, name: users.name, profilePicture: users.profilePicture, lastSeen: users.lastSeen, about: users.about
-    }).from(users).where(eq(users.id, chat.adminId));
-    res.json({ chat: { ...chat, admin } });
+    const [chatData] = await db.select({
+      chat: chats,
+      admin: {
+        id: users.id,
+        name: users.name,
+        profilePicture: users.profilePicture,
+        lastSeen: users.lastSeen,
+        about: users.about
+      }
+    })
+    .from(chats)
+    .leftJoin(users, eq(chats.adminId, users.id))
+    .where(eq(chats.userId, req.user.id));
+
+    if (!chatData) return res.status(404).json({ message: 'Chat not found' });
+    res.json({ chat: { ...chatData.chat, admin: chatData.admin } });
   } catch (err) {
     console.error('getMyChat error:', err);
     res.status(500).json({ message: 'Server error' });

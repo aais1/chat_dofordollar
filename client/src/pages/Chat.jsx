@@ -297,7 +297,7 @@ export default function Chat() {
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                      <div className="flex justify-between items-baseline">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">Admin</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{initialChat?.admin?.name || 'Admin'}</p>
                         <span className="text-[10px] text-gray-400">{formatChatDate(chat?.lastMessageAt)}</span>
                      </div>
                      <p className="text-sm text-gray-500 truncate">{chat?.lastMessage || 'Start a conversation'}</p>
@@ -387,7 +387,7 @@ export default function Chat() {
                    {chat?.admin?.profilePicture ? <img src={chat.admin.profilePicture} className="w-full h-full object-cover"/> : <MessageSquare size={20} className="text-white absolute inset-0 m-auto" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                   <p className="font-bold dark:text-white text-[15px] leading-tight">Admin</p>
+                   <p className="font-bold dark:text-white text-[15px] leading-tight">{chat?.admin?.name || 'Admin'}</p>
                    <p className="text-[11px] text-gray-500 font-medium">
                       {adminOnline ? <span className="text-green-500 font-bold">Online</span> : formatLastSeen(chat?.admin?.lastSeen)}
                    </p>
