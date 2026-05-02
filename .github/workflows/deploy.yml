@@ -38,7 +38,7 @@ jobs:
 
           # ===== FRONTEND =====
           cd ../client
-          npm install
+          npm install --legacy-peer-deps
           npm run build
 
           # Copy build to nginx root
