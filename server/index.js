@@ -3,7 +3,6 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import rateLimit from 'express-rate-limit';
 
 import { initSocket } from './sockets/index.js';
 import { startStatusCleanupJob } from './jobs/cleanupStatuses.js';
@@ -44,14 +43,6 @@ app.use(cors({
 // Body parsing
 
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
-
-// Global rate limit
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
 
 // API Routes
 app.use('/api/auth',     authRoutes);
