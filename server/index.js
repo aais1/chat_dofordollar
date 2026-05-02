@@ -28,13 +28,7 @@ const allowedOrigins = [
   'http://chatapp.dofordollars.com'
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS blocked: ${origin}`));
-  },
-  credentials: true,
-}));
+app.use(cors("*"));
 
 // Body parsing
 app.use(express.json({ limit: '5mb' }));
