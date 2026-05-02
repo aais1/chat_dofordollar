@@ -495,11 +495,19 @@ export default function Admin() {
     setSelected(prev => prev?.userId === userId ? { ...prev, userIsBlocked: data.user.isBlocked } : prev);
   };
 
-  const deleteUser = async (userId) => {
-    if (!confirm('Delete this user?')) return;
-    await api.delete(`/users/${userId}`);
-    setChats(prev => prev.filter(c => c.userId !== userId));
-    if (selectedChat?.userId === userId) { setSelected(null); setMessages([]); }
+  const handleDeleteChat = async (chatId) => {
+    if (!confirm('Are you sure you want to clear this chat history and remove it from your list?')) return;
+    try {
+      await api.delete(`/chats/${chatId}`);
+      setChats(prev => prev.filter(c => c.id !== chatId));
+      if (selectedChat?.id === chatId) {
+        setSelected(null);
+        setMessages([]);
+      }
+      toast.success('Chat history cleared');
+    } catch (err) {
+      toast.error('Failed to clear chat');
+    }
   };
 
   let filtered = chats.filter(c => {
@@ -756,7 +764,7 @@ export default function Admin() {
                     <p className="text-[10px] text-gray-400">Click to view profile</p>
                  </div>
                  <button onClick={(e) => { e.stopPropagation(); toggleBlock(selectedChat.userId); }} className={`p-2 rounded-full ${selectedChat.userIsBlocked ? 'text-red-500' : 'text-gray-400 font-bold'}`}><Ban size={18}/></button>
-                 <button onClick={(e) => { e.stopPropagation(); deleteUser(selectedChat.userId); }} className="p-2 rounded-full text-red-500"><Trash2 size={18}/></button>
+                 <button onClick={(e) => { e.stopPropagation(); handleDeleteChat(selectedChat.id); }} className="p-2 rounded-full text-red-500"><Trash2 size={18}/></button>
               </div>
                <div className="flex-1 relative overflow-hidden flex flex-col">
                   {msgLoading && (

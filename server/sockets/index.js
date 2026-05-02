@@ -66,6 +66,7 @@ export const initSocket = (io) => {
         await db.update(chats).set({
           lastMessage:   lastMsg,
           lastMessageAt: new Date(),
+          isActive:      true,
         }).where(eq(chats.id, chatId));
 
         // Emit to room

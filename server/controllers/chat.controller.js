@@ -45,12 +45,14 @@ export const getAllChats = async (req, res) => {
         userName: users.name,
         userPhone: users.phone,
         userProfilePicture: users.profilePicture,
+        userAbout: users.about,
         userIsBlocked: users.isBlocked,
         userIsMuted: users.isMuted,
         userLastSeen: users.lastSeen,
       })
       .from(chats)
       .leftJoin(users, eq(chats.userId, users.id))
+      .where(eq(chats.isActive, true))
       .orderBy(desc(chats.isPinned), desc(chats.lastMessageAt));
 
     // Fetch labels for these chats
@@ -162,6 +164,7 @@ export const sendMessage = async (req, res) => {
       lastMessage:   content || `[${messageType}]`,
       lastMessageAt: new Date(),
       unreadCount:   sql`${chats.unreadCount} + 1`,
+      isActive:      true,
     }).where(eq(chats.id, parseInt(chatId)));
 
     res.status(201).json({ message: msg });
@@ -194,7 +197,12 @@ export const deleteChat = async (req, res) => {
   try {
     const { chatId } = req.params;
     await db.delete(messages).where(eq(messages.chatId, parseInt(chatId)));
-    await db.update(chats).set({ lastMessage: null, lastMessageAt: null, unreadCount: 0 })
+    await db.update(chats).set({ 
+      lastMessage: null, 
+      lastMessageAt: null, 
+      unreadCount: 0,
+      isActive: false
+    })
       .where(eq(chats.id, parseInt(chatId)));
     res.json({ success: true });
   } catch (err) {
