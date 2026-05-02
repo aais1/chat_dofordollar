@@ -32,7 +32,12 @@ const allowedOrigins = [
   'http://chatapp.dofordollars.com'
 ];
 
-app.use(cors("*"));
+app.use(cors({
+  origin: (origin, callback) => {
+    callback(null, true);
+  },
+  credentials: true,
+}));
 
 
 //
@@ -62,7 +67,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() 
 // Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: true,
     methods: ['GET', 'POST'],
     credentials: true,
   },
