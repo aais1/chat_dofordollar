@@ -16,7 +16,7 @@ import {
   LogOut, Sun, Moon, Search, Shield,
   Ban, BellOff, Trash2, Plus, Upload, Settings,
   Image as ImageIcon, Film, Type, ChevronLeft,
-  MessageCircle, CircleDashed, Filter
+  MessageCircle, CircleDashed, Filter, Tag
 } from 'lucide-react';
 
 const notify = (title, body, icon) => {
@@ -55,6 +55,15 @@ function ChatRow({ chat, selected, onClick }) {
             </span>
           )}
         </div>
+        {chat.labels && chat.labels.length > 0 && (
+          <div className="flex gap-1 mt-1 overflow-x-auto no-scrollbar">
+            {chat.labels.map(l => (
+               <span key={l.id} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ backgroundColor: `${l.color}22`, color: l.color, border: `1px solid ${l.color}44` }}>
+                  {l.name}
+               </span>
+            ))}
+          </div>
+        )}
       </div>
     </button>
   );
@@ -70,6 +79,68 @@ function ChatRowSkeleton() {
           <div className="h-2 w-8 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
         </div>
         <div className="h-2 w-32 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
+      </div>
+    </div>
+  );
+}
+
+function LabelModal({ onClose, onCreated, chats }) {
+  const [name, setName] = useState('');
+  const [selectedChats, setSelectedChats] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim()) return toast.error('Label name required');
+    setLoading(true);
+    try {
+      const { data } = await api.post('/labels', { name, chatIds: selectedChats });
+      onCreated(data.label, selectedChats);
+      onClose();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Failed to create label');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleChat = (id) => {
+    setSelectedChats(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-[#202C33] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border)] bg-gray-50 dark:bg-[#2A3942]">
+          <h3 className="font-semibold text-gray-900 dark:text-white">Create New Label</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+        </div>
+        <div className="p-5 flex-shrink-0">
+          <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 block uppercase">Label Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. New Lead" autoFocus
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#111B21] text-gray-900 dark:text-white focus:outline-none focus:border-green-500" />
+        </div>
+        <div className="px-5 pb-2 flex-shrink-0">
+          <label className="text-xs font-bold text-gray-500 dark:text-gray-400 block uppercase">Assign to Chats (Optional)</label>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2">
+          {chats.map(c => (
+             <label key={c.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-[#2A3942] cursor-pointer transition">
+                <input type="checkbox" checked={selectedChats.includes(c.id)} onChange={() => toggleChat(c.id)} className="w-5 h-5 rounded border-gray-300 text-green-500 focus:ring-green-500" />
+                <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
+                   {c.userProfilePicture ? <img src={c.userProfilePicture} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-green-600 flex items-center justify-center text-white font-bold text-xs">{c.userName[0]}</div>}
+                </div>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{c.userName}</span>
+             </label>
+          ))}
+          {chats.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No chats available</p>}
+        </div>
+        <div className="flex gap-3 p-5 bg-gray-50 dark:bg-[#2A3942]/50 border-t border-[var(--border)] flex-shrink-0">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl font-semibold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">Cancel</button>
+          <button onClick={submit} disabled={loading || !name.trim()}
+            className="flex-1 py-2.5 rounded-xl text-[#111B21] font-bold disabled:opacity-50 transition bg-green-500 hover:bg-green-400 shadow-lg shadow-green-500/20">
+            {loading ? 'Creating...' : 'Create Label'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -170,6 +241,9 @@ export default function Admin() {
   const [messages, setMessages]     = useState([]);
   const [statuses, setStatuses]     = useState([]);
   const [search, setSearch]         = useState('');
+  const [allLabels, setAllLabels]   = useState([]);
+  const [activeLabel, setActiveLabel] = useState(null);
+  const [showLabelModal, setShowLabelModal] = useState(false);
   const [typing, setTyping]         = useState(false);
   const [loading, setLoading]       = useState(true);
   const [msgLoading, setMsgLoad]    = useState(false);
@@ -199,12 +273,13 @@ export default function Admin() {
     if (Notification.permission === 'default') Notification.requestPermission();
     const init = async () => {
       try {
-        const [chatRes, statusRes, welcomeRes] = await Promise.all([
-          api.get('/chats'), api.get('/statuses'), api.get('/welcome'),
+        const [chatRes, statusRes, welcomeRes, labelsRes] = await Promise.all([
+          api.get('/chats'), api.get('/statuses'), api.get('/welcome'), api.get('/labels')
         ]);
         setChats(chatRes.data.chats);
         setStatuses(statusRes.data.statuses);
         setWelcome(welcomeRes.data.message);
+        setAllLabels(labelsRes.data.labels);
       } catch (err) { console.error(err); } finally { setLoading(false); }
     };
     init();
@@ -340,7 +415,10 @@ export default function Admin() {
     if (selectedChat?.userId === userId) { setSelected(null); setMessages([]); }
   };
 
-  const filtered = chats.filter(c => c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search));
+  let filtered = chats.filter(c => c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search));
+  if (activeLabel) {
+    filtered = filtered.filter(c => c.labels?.some(l => l.id === activeLabel));
+  }
 
   return (
     <div className="flex h-screen overflow-hidden font-sans bg-[var(--bg)] relative">
@@ -359,9 +437,15 @@ export default function Admin() {
             <Settings size={24}/>
             <span className="text-[10px] md:hidden font-bold">Settings</span>
          </button>
-         <div className="hidden md:flex mt-auto flex-col gap-4">
-            <button onClick={toggle} className="p-3 text-gray-500 hover:text-green-400">{dark ? <Sun size={24}/> : <Moon size={24}/>}</button>
-            <button onClick={() => {logout(); navigate('/admin/login');}} className="p-3 text-gray-500 hover:text-red-500"><LogOut size={24}/></button>
+         <div className="contents md:flex md:mt-auto md:flex-col md:gap-4">
+            <button onClick={toggle} className="flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 text-gray-500 hover:text-green-400">
+               {dark ? <Sun size={24}/> : <Moon size={24}/>}
+               <span className="text-[10px] md:hidden font-bold">Theme</span>
+            </button>
+            <button onClick={() => {logout(); navigate('/admin/login');}} className="flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 text-gray-500 hover:text-red-500">
+               <LogOut size={24}/>
+               <span className="text-[10px] md:hidden font-bold">Logout</span>
+            </button>
          </div>
       </div>
 
@@ -378,6 +462,18 @@ export default function Admin() {
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search chats..." className="w-full bg-gray-100 dark:bg-[#202C33] text-sm py-2 pl-10 pr-4 rounded-xl dark:text-white focus:outline-none"/>
                  </div>
+              </div>
+              <div className="px-4 mb-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                 <button onClick={() => setShowLabelModal(true)} className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#202C33] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#2A3942] transition">
+                    <Plus size={12}/> Add New
+                 </button>
+                 {allLabels.map(l => (
+                    <button key={l.id} onClick={() => setActiveLabel(prev => prev === l.id ? null : l.id)}
+                       className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${activeLabel === l.id ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
+                       style={{ backgroundColor: `${l.color}22`, color: l.color, borderColor: activeLabel === l.id ? l.color : 'transparent' }}>
+                       <Tag size={10}/> {l.name}
+                    </button>
+                 ))}
               </div>
                <div className="flex-1 overflow-y-auto">
                   {loading ? (
@@ -527,6 +623,12 @@ export default function Admin() {
          )}
       </div>
 
+      {showLabelModal && <LabelModal onClose={() => setShowLabelModal(false)} onCreated={(label, chatIds) => {
+         setAllLabels(prev => [...prev, label]);
+         if (chatIds && chatIds.length > 0) {
+            setChats(prev => prev.map(c => chatIds.includes(c.id) ? { ...c, labels: [...(c.labels || []), label] } : c));
+         }
+      }} chats={chats} />}
       {showStatusModal && <StatusUploadModal onClose={() => setShowModal(false)} onCreated={s => setStatuses(prev => [s, ...prev])}/>}
       {viewStatus !== null && <StatusViewer statuses={statuses.filter(s => activeTab === 'chats' ? true : true)} startIndex={viewStatus} onClose={() => setViewStatus(null)} />}
     </div>

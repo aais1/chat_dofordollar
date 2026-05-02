@@ -14,6 +14,7 @@ import chatRoutes    from './routes/chat.routes.js';
 import userRoutes    from './routes/user.routes.js';
 import statusRoutes  from './routes/status.routes.js';
 import miscRoutes    from './routes/misc.routes.js';
+import labelRoutes   from './routes/label.routes.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -50,6 +51,7 @@ app.use('/api/auth',     authRoutes);
 app.use('/api/chats',    chatRoutes);
 app.use('/api/users',    userRoutes);
 app.use('/api/statuses', statusRoutes);
+app.use('/api/labels',   labelRoutes);
 app.use('/api',          miscRoutes);
 
 // Health check

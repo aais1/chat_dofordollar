@@ -1,6 +1,6 @@
 import { db } from '../config/db.js';
-import { chats, messages, users } from '../models/schema.js';
-import { eq, desc, asc, lt, and, sql } from 'drizzle-orm';
+import { chats, messages, users, labels, chatLabels } from '../models/schema.js';
+import { eq, desc, asc, lt, and, sql, inArray } from 'drizzle-orm';
 
 // GET /api/chats/my-chat  (user)
 export const getMyChat = async (req, res) => {
@@ -40,7 +40,34 @@ export const getAllChats = async (req, res) => {
       .from(chats)
       .leftJoin(users, eq(chats.userId, users.id))
       .orderBy(desc(chats.lastMessageAt));
-    res.json({ chats: allChats });
+
+    // Fetch labels for these chats
+    const chatIds = allChats.map(c => c.id);
+    let allChatLabels = [];
+    if (chatIds.length > 0) {
+      allChatLabels = await db
+        .select({
+          chatId: chatLabels.chatId,
+          labelId: labels.id,
+          name: labels.name,
+          color: labels.color,
+        })
+        .from(chatLabels)
+        .innerJoin(labels, eq(chatLabels.labelId, labels.id))
+        .where(inArray(chatLabels.chatId, chatIds));
+    }
+
+    // Attach labels
+    const chatsWithLabels = allChats.map(chat => ({
+      ...chat,
+      labels: allChatLabels.filter(cl => cl.chatId === chat.id).map(cl => ({
+        id: cl.labelId,
+        name: cl.name,
+        color: cl.color
+      }))
+    }));
+
+    res.json({ chats: chatsWithLabels });
   } catch (err) {
     console.error('getAllChats error:', err);
     res.status(500).json({ message: 'Server error' });

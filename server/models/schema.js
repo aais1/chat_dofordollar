@@ -94,3 +94,20 @@ export const welcomeMessages = pgTable('welcome_messages', {
   updatedBy: integer('updated_by').references(() => users.id),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// Labels table
+export const labels = pgTable('labels', {
+  id:        serial('id').primaryKey(),
+  name:      varchar('name', { length: 50 }).notNull().unique(),
+  color:     varchar('color', { length: 20 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Chat labels association table
+export const chatLabels = pgTable('chat_labels', {
+  id:      serial('id').primaryKey(),
+  chatId:  integer('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
+  labelId: integer('label_id').notNull().references(() => labels.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  chatLabelIdx: uniqueIndex('chat_labels_unique_idx').on(table.chatId, table.labelId),
+}));

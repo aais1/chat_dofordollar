@@ -5,15 +5,15 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { message: 'Too many login attempts, please try again later' },
-});
+// const loginLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   max: 10,
+//   message: { message: 'Too many login attempts, please try again later' },
+// });
 
 router.post('/signup', signup);
-router.post('/login', loginLimiter, login);
-router.post('/admin/login', loginLimiter, adminLogin);
+router.post('/login', login);
+router.post('/admin/login', adminLogin);
 router.get('/me', protect, getMe);
 
 export default router;

@@ -1,0 +1,51 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 3.133.89.130 >> ~/.ssh/known_hosts
+
+      - name: Deploy on EC2
+        run: |
+          ssh ubuntu@3.133.89.130 << 'EOF'
+
+          # Go to project
+          cd ~/chat_dofordollar
+
+          # Pull latest code
+          git pull origin main
+
+          # ===== BACKEND =====
+          cd server
+          npm install
+          pm2 restart all
+
+          # ===== FRONTEND =====
+          cd ../client
+          npm install
+          npm run build
+
+          # Copy build to nginx root
+          sudo rm -rf /var/www/chat_dofordollar/*
+          sudo cp -r dist/* /var/www/chat_dofordollar/
+
+          # Restart nginx
+          sudo systemctl restart nginx
+
+          EOF
