@@ -24,6 +24,8 @@ const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'http://localhost:5173',
   'http://localhost:3000',
+  'https://chatapp.dofordollars.com',
+  'http://chatapp.dofordollars.com'
 ];
 
 app.use(cors({
