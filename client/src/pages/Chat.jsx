@@ -143,7 +143,14 @@ export default function Chat() {
 
     const offStopTyping = on('user-stop-typing', () => setTyping(false));
 
-    return () => { offMsg(); offDelivered(); offRead(); offTyping(); offStopTyping(); };
+    const offProfile = on('profile-updated', ({ userId, updates }) => {
+      if (userId === activeChatRef.current?.adminId) {
+        setChat(prev => prev ? ({ ...prev, admin: { ...prev.admin, ...updates } }) : prev);
+        setInitialChat(prev => prev ? ({ ...prev, admin: { ...prev.admin, ...updates } }) : prev);
+      }
+    });
+
+    return () => { offMsg(); offDelivered(); offRead(); offTyping(); offStopTyping(); offProfile(); };
   }, [on, emit, user.id, isConnected]);
 
   const handleSend = useCallback(async (data) => {
@@ -281,7 +288,11 @@ export default function Chat() {
             <div className="flex-1 overflow-y-auto">
                <button onClick={() => { setChat(initialChat); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 dark:hover:bg-[#202C33] transition ${chat ? 'bg-gray-50 dark:bg-[#2A3942]/30' : ''}`}>
                   <div className="relative w-12 h-12 rounded-full overflow-hidden bg-green-600 flex-shrink-0">
-                    <MessageSquare size={24} className="text-white absolute inset-0 m-auto" />
+                    {initialChat?.admin?.profilePicture ? (
+                      <img src={initialChat.admin.profilePicture} className="w-full h-full object-cover" />
+                    ) : (
+                      <MessageSquare size={24} className="text-white absolute inset-0 m-auto" />
+                    )}
                     {adminOnline && <div className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-[#111B21]" />}
                   </div>
                   <div className="flex-1 min-w-0 text-left">

@@ -365,6 +365,7 @@ export default function Admin() {
       setAbout(tempAbout);
       setEditingAbout(false);
       setUser(prev => ({ ...prev, about: tempAbout }));
+      emit('update-profile', { about: tempAbout });
     } catch (e) { alert('Update failed'); }
   };
 
@@ -377,6 +378,7 @@ export default function Admin() {
       toast.loading('Uploading...', { id: 'upload' });
       const { data } = await api.patch(`/users/${user.id}/profile-picture`, formData);
       setUser(data.user);
+      emit('update-profile', { profilePicture: data.user.profilePicture });
       toast.success('Profile picture updated!', { id: 'upload' });
     } catch (err) {
       toast.error('Failed to upload profile picture', { id: 'upload' });

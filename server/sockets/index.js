@@ -115,6 +115,11 @@ export const initSocket = (io) => {
       socket.join(`chat:${chatId}`);
     });
 
+    // --- profile-update ---
+    socket.on('update-profile', (data) => {
+      io.emit('profile-updated', { userId: user.id, updates: data });
+    });
+
     // --- disconnect ---
     socket.on('disconnect', async () => {
       onlineUsers.delete(user.id);
