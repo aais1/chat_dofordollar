@@ -17,6 +17,10 @@ import miscRoutes    from './routes/misc.routes.js';
 import labelRoutes   from './routes/label.routes.js';
 
 const app = express();
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '5mb' }));
+
+
 const httpServer = createServer(app);
 
 // CORS
@@ -30,9 +34,10 @@ const allowedOrigins = [
 
 app.use(cors("*"));
 
+
 //
 // Body parsing
-app.use(express.json({ limit: '5mb' }));
+
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Global rate limit
