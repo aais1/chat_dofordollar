@@ -113,3 +113,15 @@ export const recordView = async (req, res) => {
     res.json({ success: true });
   }
 };
+
+// DELETE /api/statuses/:statusId
+export const deleteStatus = async (req, res) => {
+  try {
+    const { statusId } = req.params;
+    await db.delete(statuses).where(eq(statuses.id, parseInt(statusId)));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('deleteStatus error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

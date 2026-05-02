@@ -17,6 +17,7 @@ export const users = pgTable('users', {
   pin:            text('pin').notNull(),
   role:           roleEnum('role').default('user').notNull(),
   profilePicture: text('profile_picture'),
+  about:          text('about'),
   isBlocked:      boolean('is_blocked').default(false).notNull(),
   isMuted:        boolean('is_muted').default(false).notNull(),
   lastSeen:       timestamp('last_seen'),
@@ -35,6 +36,8 @@ export const chats = pgTable('chats', {
   lastMessageAt: timestamp('last_message_at'),
   unreadCount:   integer('unread_count').default(0).notNull(),
   isActive:      boolean('is_active').default(true).notNull(),
+  isArchived:    boolean('is_archived').default(false).notNull(),
+  isPinned:      boolean('is_pinned').default(false).notNull(),
   createdAt:     timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   userIdIdx:        uniqueIndex('chats_user_id_idx').on(table.userId),

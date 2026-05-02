@@ -13,7 +13,7 @@ import TypingIndicator from '../components/chat/TypingIndicator.jsx';
 import { StatusCircle, StatusViewer, SegmentedCircle } from '../components/status/StatusViewer.jsx';
 import {
   LogOut, Sun, Moon, MessageSquare,
-  MessageCircle, CircleDashed, Settings, ChevronLeft
+  MessageCircle, CircleDashed, Settings, ChevronLeft, X
 } from 'lucide-react';
 
 const notify = (title, body) => {
@@ -38,6 +38,7 @@ export default function Chat() {
   const [hasMore, setHasMore]   = useState(true);
   const [viewerStatus, setViewerStatus] = useState(null);
   const [sidebarOpen, setSidebarOpen]   = useState(false);
+  const [showProfile, setShowProfile]   = useState(false);
   const [initialChat, setInitialChat]   = useState(null);
 
   const bottomRef  = useRef();
@@ -318,12 +319,12 @@ export default function Chat() {
          {chat ? (
            <>
              {/* Chat Header */}
-             <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#202C33] border-b border-[var(--border)] z-10 shadow-sm">
-                <button onClick={() => setSidebarOpen(true)} className="md:hidden p-1 text-gray-500 -ml-1">
+             <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#202C33] border-b border-[var(--border)] z-10 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2A3942] transition" onClick={() => setShowProfile(true)}>
+                <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }} className="md:hidden p-1 text-gray-500 -ml-1">
                    <ChevronLeft size={24} />
                 </button>
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-green-600 flex-shrink-0 relative">
-                   <MessageSquare size={20} className="text-white absolute inset-0 m-auto" />
+                   {chat?.admin?.profilePicture ? <img src={chat.admin.profilePicture} className="w-full h-full object-cover"/> : <MessageSquare size={20} className="text-white absolute inset-0 m-auto" />}
                 </div>
                 <div className="flex-1 min-w-0">
                    <p className="font-bold dark:text-white text-[15px] leading-tight">Admin</p>
@@ -382,6 +383,28 @@ export default function Chat() {
            </div>
          )}
       </div>
+
+      {/* 4. ADMIN PROFILE PANE */}
+      {showProfile && chat && (
+        <div className="absolute right-0 top-0 bottom-0 w-full md:w-80 lg:w-96 bg-white dark:bg-[#111B21] border-l border-[var(--border)] z-40 flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="flex items-center gap-4 p-4 border-b border-[var(--border)] bg-gray-50 dark:bg-[#202C33]">
+            <button onClick={() => setShowProfile(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white"><X size={24} /></button>
+            <h2 className="text-lg font-bold dark:text-white">Admin Profile</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
+            <div className="w-40 h-40 rounded-full overflow-hidden bg-green-600 border-4 border-white dark:border-[#202C33] shadow-lg mb-6">
+              {chat.admin?.profilePicture ? <img src={chat.admin.profilePicture} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-4xl text-white font-bold">{chat.admin?.name?.[0]}</div>}
+            </div>
+            <h3 className="text-2xl font-bold dark:text-white mb-1">{chat.admin?.name || 'Administrator'}</h3>
+            <p className="text-sm text-gray-500 font-medium mb-8">{adminOnline ? 'Online' : formatLastSeen(chat.admin?.lastSeen)}</p>
+            
+            <div className="w-full bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
+               <p className="text-[11px] font-bold text-green-500 uppercase mb-2 tracking-widest">About</p>
+               <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{chat.admin?.about || 'Hey there! I am using ChatApp.'}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {viewerStatus !== null && (
         <StatusViewer statuses={statuses} startIndex={viewerStatus} onClose={() => setViewerStatus(null)} />

@@ -80,3 +80,21 @@ export const updateProfilePicture = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// PATCH /api/users/:userId/about
+export const updateAbout = async (req, res) => {
+  try {
+    const { about } = req.body;
+    // ensure admin can only update their own about, or user their own
+    if (req.user.id !== parseInt(req.params.userId)) {
+       return res.status(403).json({ message: 'Not authorized' });
+    }
+    const [updated] = await db.update(users).set({ about, updatedAt: new Date() })
+      .where(eq(users.id, parseInt(req.params.userId))).returning();
+    const { pin: _, ...safe } = updated;
+    res.json({ user: safe });
+  } catch (err) {
+    console.error('updateAbout error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

@@ -16,7 +16,7 @@ import {
   LogOut, Sun, Moon, Search, Shield,
   Ban, BellOff, Trash2, Plus, Upload, Settings,
   Image as ImageIcon, Film, Type, ChevronLeft,
-  MessageCircle, CircleDashed, Filter, Tag
+  MessageCircle, CircleDashed, Filter, Tag, Pin, Archive, ArchiveRestore
 } from 'lucide-react';
 
 const notify = (title, body, icon) => {
@@ -28,9 +28,10 @@ const notify = (title, body, icon) => {
 function ChatRow({ chat, selected, onClick }) {
   const unread = chat.unreadCount;
   return (
-    <button onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 transition hover:bg-gray-100 dark:hover:bg-[#202C33] ${selected ? 'bg-gray-100 dark:bg-[#2A3942]' : ''}`}>
-      <div className="relative w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+    <div className="relative group">
+      <button onClick={() => onClick('open')}
+        className={`w-full flex items-center gap-3 px-4 py-3 transition hover:bg-gray-100 dark:hover:bg-[#202C33] ${selected ? 'bg-gray-100 dark:bg-[#2A3942]' : ''}`}>
+        <div className="relative w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
         {chat.userProfilePicture
           ? <img src={chat.userProfilePicture} className="w-full h-full object-cover" alt="" />
           : <div className="w-full h-full flex items-center justify-center font-bold text-white text-sm" style={{ backgroundColor: `hsl(${(chat.userId * 47) % 360}, 60%, 50%)` }}>
@@ -55,17 +56,26 @@ function ChatRow({ chat, selected, onClick }) {
             </span>
           )}
         </div>
-        {chat.labels && chat.labels.length > 0 && (
-          <div className="flex gap-1 mt-1 overflow-x-auto no-scrollbar">
-            {chat.labels.map(l => (
-               <span key={l.id} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ backgroundColor: `${l.color}22`, color: l.color, border: `1px solid ${l.color}44` }}>
-                  {l.name}
-               </span>
-            ))}
-          </div>
-        )}
+          {chat.labels && chat.labels.length > 0 && (
+            <div className="flex gap-1 mt-1 overflow-x-auto no-scrollbar">
+              {chat.labels.map(l => (
+                 <span key={l.id} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ backgroundColor: `${l.color}22`, color: l.color, border: `1px solid ${l.color}44` }}>
+                    {l.name}
+                 </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </button>
+      <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2 bg-gradient-to-l from-gray-100 dark:from-[#2A3942] to-transparent pl-4">
+        <button onClick={(e) => { e.stopPropagation(); onClick('pin'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-green-500 transition">
+          <Pin size={14} className={chat.isPinned ? 'fill-current' : ''} />
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onClick('archive'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-blue-500 transition">
+          {chat.isArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -243,6 +253,7 @@ export default function Admin() {
   const [search, setSearch]         = useState('');
   const [allLabels, setAllLabels]   = useState([]);
   const [activeLabel, setActiveLabel] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [typing, setTyping]         = useState(false);
   const [loading, setLoading]       = useState(true);
@@ -252,6 +263,9 @@ export default function Admin() {
   const [welcomeMsg, setWelcome]     = useState('');
   const [isEditingWelcome, setEditingWelcome] = useState(false);
   const [tempWelcome, setTempWelcome] = useState('');
+  const [aboutMsg, setAbout]         = useState(user?.about || '');
+  const [isEditingAbout, setEditingAbout] = useState(false);
+  const [tempAbout, setTempAbout]     = useState('');
   const [sidebarOpen, setSidebar]   = useState(true);
   const [hasMore, setHasMore]       = useState(true);
   const [loadingMore, setLoadMore]  = useState(false);
@@ -344,6 +358,14 @@ export default function Admin() {
     } catch (e) { alert('Update failed'); }
   };
 
+  const updateAbout = async () => {
+    try {
+      await api.patch(`/users/${user.id}/about`, { about: tempAbout });
+      setAbout(tempAbout);
+      setEditingAbout(false);
+    } catch (e) { alert('Update failed'); }
+  };
+
   const openChat = async (chat) => {
     setSelected(chat);
     setSidebar(false);
@@ -416,9 +438,37 @@ export default function Admin() {
   };
 
   let filtered = chats.filter(c => c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search));
+  
+  if (showArchived) {
+    filtered = filtered.filter(c => c.isArchived);
+  } else {
+    filtered = filtered.filter(c => !c.isArchived);
+  }
+
   if (activeLabel) {
     filtered = filtered.filter(c => c.labels?.some(l => l.id === activeLabel));
   }
+
+  const handleChatAction = async (chatId, action) => {
+    if (action === 'open') {
+      const chat = chats.find(c => c.id === chatId);
+      if (chat) openChat(chat);
+      return;
+    }
+    try {
+      const { data } = await api.patch(`/chats/${chatId}/${action}`);
+      setChats(prev => {
+        const field = action === 'pin' ? 'isPinned' : 'isArchived';
+        const updated = prev.map(c => c.id === chatId ? { ...c, [field]: data[field] } : c);
+        return [...updated].sort((a, b) => {
+          if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+          return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
+        });
+      });
+    } catch (e) {
+      toast.error(`Failed to ${action} chat`);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden font-sans bg-[var(--bg)] relative">
@@ -474,6 +524,10 @@ export default function Admin() {
                        <Tag size={10}/> {l.name}
                     </button>
                  ))}
+                 <button onClick={() => setShowArchived(!showArchived)}
+                    className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${showArchived ? 'opacity-100 bg-blue-100 text-blue-600 border-blue-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
+                    <Archive size={10}/> {showArchived ? 'Hide Archived' : 'Archived'}
+                 </button>
               </div>
                <div className="flex-1 overflow-y-auto">
                   {loading ? (
@@ -481,7 +535,7 @@ export default function Admin() {
                       {[1,2,3,4,5,6].map(i => <ChatRowSkeleton key={i} />)}
                     </div>
                   ) : filtered.map(chat => (
-                    <ChatRow key={chat.id} chat={chat} selected={selectedChat?.id === chat.id} onClick={() => openChat(chat)} />
+                    <ChatRow key={chat.id} chat={chat} selected={selectedChat?.id === chat.id} onClick={(action) => handleChatAction(chat.id, action)} />
                   ))}
                </div> 
            </>
@@ -565,6 +619,34 @@ export default function Admin() {
                            >
                               <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
                               EDIT WELCOME MESSAGE
+                           </button>
+                        </>
+                     )}
+                  <div className="bg-gray-50 dark:bg-[#202C33] p-6 rounded-3xl border border-[var(--border)] shadow-sm mt-4">
+                     <p className="text-[11px] font-bold text-green-500 uppercase mb-3 tracking-widest">My About Info</p>
+                     
+                     {isEditingAbout ? (
+                        <div className="space-y-4">
+                           <textarea 
+                              value={tempAbout} 
+                              onChange={e => setTempAbout(e.target.value)}
+                              className="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111B21] text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                              rows={2}
+                           />
+                           <div className="flex gap-2">
+                              <button onClick={updateAbout} className="flex-1 py-2 bg-green-500 text-white rounded-xl font-bold text-sm hover:bg-green-600 transition">Save Changes</button>
+                              <button onClick={() => setEditingAbout(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-sm hover:bg-gray-300 transition">Cancel</button>
+                           </div>
+                        </div>
+                     ) : (
+                        <>
+                           <p className="text-[15px] text-gray-700 dark:text-gray-200 mb-6 leading-relaxed">"{aboutMsg || 'Available'}"</p>
+                           <button 
+                              onClick={() => { setTempAbout(aboutMsg); setEditingAbout(true); }} 
+                              className="flex items-center gap-2 text-[12px] font-bold text-green-500 hover:text-green-400 transition group"
+                           >
+                              <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
+                              EDIT ABOUT INFO
                            </button>
                         </>
                      )}

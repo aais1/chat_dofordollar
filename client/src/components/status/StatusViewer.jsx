@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Eye } from 'lucide-react';
+import { X, Eye, Trash2, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
+import toast from 'react-hot-toast';
 
 export function SegmentedCircle({ count, viewedCount, size = 56, strokeWidth = 2 }) {
   if (count <= 1) {
@@ -73,37 +74,63 @@ export function StatusViewer({ statuses, startIndex = 0, onClose }) {
   const { user } = useAuth();
   const [current, setCurrent] = useState(startIndex);
   const [progress, setProgress] = useState(0);
+  const [viewers, setViewers] = useState([]);
+  const [showViewers, setShowViewers] = useState(false);
   const timerRef = useRef();
   const progressRef = useRef();
   const DURATION = 5000;
 
   const status = statuses[current];
 
+  const fetchViewers = async (statusId) => {
+    try {
+      const { data } = await api.get(`/statuses/${statusId}/views`);
+      setViewers(data.views);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     if (!status) return;
-    // Record view
     api.post(`/statuses/${status.id}/view`).catch(() => {});
 
-    // Start progress
-    setProgress(0);
-    let start = Date.now();
-    progressRef.current = setInterval(() => {
-      const elapsed = Date.now() - start;
-      setProgress(Math.min((elapsed / DURATION) * 100, 100));
-    }, 50);
+    if (user.role === 'admin') {
+      fetchViewers(status.id);
+    }
 
-    timerRef.current = setTimeout(() => {
-      if (current < statuses.length - 1) setCurrent(c => c + 1);
-      else onClose();
-    }, DURATION);
+    if (!showViewers) {
+      setProgress(0);
+      let start = Date.now();
+      progressRef.current = setInterval(() => {
+        const elapsed = Date.now() - start;
+        setProgress(Math.min((elapsed / DURATION) * 100, 100));
+      }, 50);
+
+      timerRef.current = setTimeout(() => {
+        if (current < statuses.length - 1) setCurrent(c => c + 1);
+        else onClose();
+      }, DURATION);
+    }
 
     return () => {
       clearTimeout(timerRef.current);
       clearInterval(progressRef.current);
     };
-  }, [current, status?.id]);
+  }, [current, status?.id, showViewers]);
 
   if (!status) return null;
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this status?')) return;
+    try {
+      await api.delete(`/statuses/${status.id}`);
+      toast.success('Status deleted');
+      onClose(); // In a real app we might just remove it from the list and go to next
+    } catch (e) {
+      toast.error('Failed to delete');
+    }
+  };
 
   const goNext = () => {
     if (current < statuses.length - 1) setCurrent(c => c + 1);
@@ -140,14 +167,41 @@ export function StatusViewer({ statuses, startIndex = 0, onClose }) {
           <p className="text-white/60 text-xs">{new Date(status.createdAt).toLocaleTimeString()}</p>
         </div>
         {user.role === 'admin' && (
-          <div className="ml-auto flex items-center gap-1 text-white/70 text-sm">
-            <Eye size={14} /> {status.viewCount}
+          <div className="ml-auto flex items-center gap-3">
+            <button onClick={() => setShowViewers(true)} className="flex items-center gap-1 text-white/90 hover:text-white text-sm font-bold bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md transition">
+              <Eye size={16} /> {status.viewCount}
+            </button>
+            <button onClick={handleDelete} className="text-white/80 hover:text-red-400 transition">
+              <Trash2 size={20} />
+            </button>
           </div>
         )}
         <button onClick={onClose} className={`${user.role !== 'admin' ? 'ml-auto' : ''} text-white/80 hover:text-white transition`}>
-          <X size={22} />
+          <X size={24} />
         </button>
       </div>
+
+      {showViewers && (
+        <div className="absolute inset-0 z-50 bg-white dark:bg-[#111B21] flex flex-col animate-in slide-in-from-bottom-8 duration-300">
+          <div className="flex items-center gap-4 p-4 border-b border-[var(--border)] bg-gray-50 dark:bg-[#202C33]">
+            <button onClick={() => setShowViewers(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white"><ChevronLeft size={24} /></button>
+            <h2 className="text-lg font-bold dark:text-white">Viewed by {status.viewCount}</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {viewers.length === 0 ? (
+              <p className="text-center text-gray-500 py-10">No views yet</p>
+            ) : viewers.map((v, i) => (
+              <div key={i} className="flex items-center gap-3 p-4 border-b border-[#2A3942]/10">
+                <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white font-bold">{v.viewerName?.[0]}</div>
+                <div>
+                  <p className="font-bold dark:text-white">{v.viewerName}</p>
+                  <p className="text-xs text-gray-500">{new Date(v.viewedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 relative flex items-center justify-center">

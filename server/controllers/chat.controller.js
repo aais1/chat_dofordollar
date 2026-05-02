@@ -8,7 +8,7 @@ export const getMyChat = async (req, res) => {
     const [chat] = await db.select().from(chats).where(eq(chats.userId, req.user.id));
     if (!chat) return res.status(404).json({ message: 'Chat not found' });
     const [admin] = await db.select({
-      id: users.id, name: users.name, profilePicture: users.profilePicture, lastSeen: users.lastSeen
+      id: users.id, name: users.name, profilePicture: users.profilePicture, lastSeen: users.lastSeen, about: users.about
     }).from(users).where(eq(users.id, chat.adminId));
     res.json({ chat: { ...chat, admin } });
   } catch (err) {
@@ -29,6 +29,8 @@ export const getAllChats = async (req, res) => {
         lastMessageAt: chats.lastMessageAt,
         unreadCount: chats.unreadCount,
         isActive: chats.isActive,
+        isPinned: chats.isPinned,
+        isArchived: chats.isArchived,
         createdAt: chats.createdAt,
         userName: users.name,
         userPhone: users.phone,
@@ -39,7 +41,7 @@ export const getAllChats = async (req, res) => {
       })
       .from(chats)
       .leftJoin(users, eq(chats.userId, users.id))
-      .orderBy(desc(chats.lastMessageAt));
+      .orderBy(desc(chats.isPinned), desc(chats.lastMessageAt));
 
     // Fetch labels for these chats
     const chatIds = allChats.map(c => c.id);
@@ -187,6 +189,36 @@ export const deleteChat = async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('deleteChat error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// PATCH /api/chats/:chatId/pin
+export const togglePin = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const [chat] = await db.select({ isPinned: chats.isPinned }).from(chats).where(eq(chats.id, parseInt(chatId)));
+    if (!chat) return res.status(404).json({ message: 'Chat not found' });
+    
+    await db.update(chats).set({ isPinned: !chat.isPinned }).where(eq(chats.id, parseInt(chatId)));
+    res.json({ success: true, isPinned: !chat.isPinned });
+  } catch (err) {
+    console.error('togglePin error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// PATCH /api/chats/:chatId/archive
+export const toggleArchive = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const [chat] = await db.select({ isArchived: chats.isArchived }).from(chats).where(eq(chats.id, parseInt(chatId)));
+    if (!chat) return res.status(404).json({ message: 'Chat not found' });
+    
+    await db.update(chats).set({ isArchived: !chat.isArchived }).where(eq(chats.id, parseInt(chatId)));
+    res.json({ success: true, isArchived: !chat.isArchived });
+  } catch (err) {
+    console.error('toggleArchive error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };
