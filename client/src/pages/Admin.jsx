@@ -651,6 +651,7 @@ export default function Admin() {
                         </>
                      )}
                   </div>
+                      </div>
               </div>
            </div>
          )}
@@ -714,5 +715,6 @@ export default function Admin() {
       {showStatusModal && <StatusUploadModal onClose={() => setShowModal(false)} onCreated={s => setStatuses(prev => [s, ...prev])}/>}
       {viewStatus !== null && <StatusViewer statuses={statuses.filter(s => activeTab === 'chats' ? true : true)} startIndex={viewStatus} onClose={() => setViewStatus(null)} />}
     </div>
+    
   );
 }
