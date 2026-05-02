@@ -61,7 +61,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() 
 // Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: true,
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   },
