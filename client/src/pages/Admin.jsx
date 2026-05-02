@@ -298,6 +298,8 @@ export default function Admin() {
   const [allLabels, setAllLabels]   = useState([]);
   const [activeLabel, setActiveLabel] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [typing, setTyping]         = useState(false);
   const [loading, setLoading]       = useState(true);
@@ -500,17 +502,14 @@ export default function Admin() {
     if (selectedChat?.userId === userId) { setSelected(null); setMessages([]); }
   };
 
-  let filtered = chats.filter(c => c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search));
-  
-  if (showArchived) {
-    filtered = filtered.filter(c => c.isArchived);
-  } else {
-    filtered = filtered.filter(c => !c.isArchived);
-  }
-
-  if (activeLabel) {
-    filtered = filtered.filter(c => c.labels?.some(l => l.id === activeLabel));
-  }
+  let filtered = chats.filter(c => {
+    const matchesSearch = c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search);
+    const matchesLabel = activeLabel ? c.labels?.some(l => l.id === activeLabel) : true;
+    const matchesUnread = onlyUnread ? c.unreadCount > 0 : true;
+    const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
+    
+    return matchesSearch && matchesLabel && matchesUnread && matchesArchive;
+  });
 
   const handleChatAction = async (chatId, action) => {
     if (action === 'open') {
@@ -587,6 +586,10 @@ export default function Admin() {
                        <Tag size={10}/> {l.name}
                     </button>
                  ))}
+                 <button onClick={() => setOnlyUnread(!onlyUnread)}
+                    className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${onlyUnread ? 'opacity-100 bg-green-100 text-green-600 border-green-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
+                    <BellOff size={10}/> {onlyUnread ? 'Showing Unread' : 'Unread'}
+                 </button>
                  <button onClick={() => setShowArchived(!showArchived)}
                     className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${showArchived ? 'opacity-100 bg-blue-100 text-blue-600 border-blue-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
                     <Archive size={10}/> {showArchived ? 'Hide Archived' : 'Archived'}
@@ -741,14 +744,19 @@ export default function Admin() {
       <div className={`${(selectedChat && !sidebarOpen) ? 'flex' : 'hidden md:flex'} flex-1 flex flex-col chat-bg min-w-0 h-full relative pb-0 md:pb-0`}>
          {selectedChat ? (
            <>
-              <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-b border-[#2A3942] z-10 shadow-lg">
-                 <button onClick={() => setSidebar(true)} className="md:hidden p-1 text-gray-400">
+              <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-b border-[#2A3942] z-10 shadow-lg cursor-pointer hover:bg-[#2A3942] transition" onClick={() => setShowUserProfile(true)}>
+                 <button onClick={(e) => { e.stopPropagation(); setSidebar(true); }} className="md:hidden p-1 text-gray-400">
                      <ChevronLeft size={24}/>
                  </button>
-                 <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold">{selectedChat.userName[0]}</div>
-                 <div className="flex-1 min-w-0"><p className="font-bold text-white truncate">{selectedChat.userName}</p></div>
-                 <button onClick={() => toggleBlock(selectedChat.userId)} className={`p-2 rounded-full ${selectedChat.userIsBlocked ? 'text-red-500' : 'text-gray-400 font-bold'}`}><Ban size={18}/></button>
-                 <button onClick={() => deleteUser(selectedChat.userId)} className="p-2 rounded-full text-red-500"><Trash2 size={18}/></button>
+                 <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold overflow-hidden">
+                    {selectedChat.userProfilePicture ? <img src={selectedChat.userProfilePicture} className="w-full h-full object-cover" /> : selectedChat.userName[0]}
+                 </div>
+                 <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white truncate">{selectedChat.userName}</p>
+                    <p className="text-[10px] text-gray-400">Click to view profile</p>
+                 </div>
+                 <button onClick={(e) => { e.stopPropagation(); toggleBlock(selectedChat.userId); }} className={`p-2 rounded-full ${selectedChat.userIsBlocked ? 'text-red-500' : 'text-gray-400 font-bold'}`}><Ban size={18}/></button>
+                 <button onClick={(e) => { e.stopPropagation(); deleteUser(selectedChat.userId); }} className="p-2 rounded-full text-red-500"><Trash2 size={18}/></button>
               </div>
                <div className="flex-1 relative overflow-hidden flex flex-col">
                   {msgLoading && (
@@ -794,6 +802,53 @@ export default function Admin() {
       }} chats={chats} />}
       {showStatusModal && <StatusUploadModal onClose={() => setShowModal(false)} onCreated={s => setStatuses(prev => [s, ...prev])}/>}
       {viewStatus !== null && <StatusViewer statuses={statuses.filter(s => activeTab === 'chats' ? true : true)} startIndex={viewStatus} onClose={() => setViewStatus(null)} />}
+
+      {/* 4. USER PROFILE PANE */}
+      {showUserProfile && selectedChat && (
+        <div className="absolute right-0 top-0 bottom-0 w-full md:w-80 lg:w-96 bg-white dark:bg-[#111B21] border-l border-[var(--border)] z-[70] flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">
+          <div className="flex items-center gap-4 p-4 border-b border-[var(--border)] bg-gray-50 dark:bg-[#202C33]">
+            <button onClick={() => setShowUserProfile(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white"><X size={24} /></button>
+            <h2 className="text-lg font-bold dark:text-white">User Profile</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
+            <div className="w-40 h-40 rounded-full overflow-hidden bg-green-600 border-4 border-white dark:border-[#202C33] shadow-lg mb-6">
+              {selectedChat.userProfilePicture ? (
+                <img src={selectedChat.userProfilePicture} className="w-full h-full object-cover" alt="" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl text-white font-bold">
+                  {selectedChat.userName?.[0]}
+                </div>
+              )}
+            </div>
+            <h3 className="text-2xl font-bold dark:text-white mb-1 text-center">{selectedChat.userName}</h3>
+            <p className="text-sm text-gray-500 font-medium mb-2">{selectedChat.userPhone}</p>
+            <p className="text-xs text-gray-400 mb-8 tracking-wide">Joined {new Date(selectedChat.createdAt).toLocaleDateString()}</p>
+            
+            <div className="w-full space-y-4">
+              <div className="bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
+                 <p className="text-[11px] font-bold text-green-500 uppercase mb-2 tracking-widest">About</p>
+                 <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{selectedChat.userAbout || 'Hey there! I am using ChatApp.'}</p>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
+                 <p className="text-[11px] font-bold text-gray-500 uppercase mb-2 tracking-widest">Last Seen</p>
+                 <p className="text-sm text-gray-800 dark:text-gray-200">{formatLastSeen(selectedChat.userLastSeen)}</p>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
+                 <p className="text-[11px] font-bold text-gray-500 uppercase mb-2 tracking-widest">Chat Status</p>
+                 <div className="flex items-center gap-2">
+                    {selectedChat.userIsBlocked ? (
+                      <span className="flex items-center gap-1 text-red-500 font-bold text-sm"><Ban size={14}/> Restricted</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-green-500 font-bold text-sm"><Shield size={14}/> Verified User</span>
+                    )}
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     
   );
