@@ -15,7 +15,7 @@ import { StatusViewer, SegmentedCircle } from '../components/status/StatusViewer
 import {
   LogOut, Sun, Moon, Search, Shield,
   Ban, BellOff, Trash2, Plus, Upload, Settings,
-  Image as ImageIcon, Film, Type, ChevronLeft,
+  Image as ImageIcon, Film, Type, ChevronLeft, MoreVertical,
   MessageCircle, CircleDashed, Filter, Tag, Pin, Archive, ArchiveRestore
 } from 'lucide-react';
 
@@ -26,7 +26,17 @@ const notify = (title, body, icon) => {
 };
 
 function ChatRow({ chat, selected, onClick }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const unread = chat.unreadCount;
+  
+  // Close menu when clicking anywhere else
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClose = () => setMenuOpen(false);
+    window.addEventListener('click', handleClose);
+    return () => window.removeEventListener('click', handleClose);
+  }, [menuOpen]);
+
   return (
     <div className="relative group">
       <button onClick={() => onClick('open')}
@@ -59,21 +69,55 @@ function ChatRow({ chat, selected, onClick }) {
           {chat.labels && chat.labels.length > 0 && (
             <div className="flex gap-1 mt-1 overflow-x-auto no-scrollbar">
               {chat.labels.map(l => (
-                 <span key={l.id} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ backgroundColor: `${l.color}22`, color: l.color, border: `1px solid ${l.color}44` }}>
-                    {l.name}
-                 </span>
+                <span key={l.id} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ backgroundColor: `${l.color}22`, color: l.color, border: `1px solid ${l.color}44` }}>
+                   {l.name}
+                </span>
               ))}
             </div>
           )}
         </div>
       </button>
-      <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-2 bg-gradient-to-l from-gray-100 dark:from-[#2A3942] to-transparent pl-4">
-        <button onClick={(e) => { e.stopPropagation(); onClick('pin'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-green-500 transition shadow-sm">
-          <Pin size={14} className={chat.isPinned ? 'fill-current' : ''} />
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onClick('archive'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-blue-500 transition shadow-sm">
-          {chat.isArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-        </button>
+
+      {/* Action Buttons */}
+      <div className="absolute right-0 top-0 bottom-0 flex items-center pr-2">
+         {/* Desktop View: Hover icons */}
+         <div className="hidden md:flex flex-col justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-gray-100 dark:from-[#2A3942] to-transparent pl-4">
+            <button onClick={(e) => { e.stopPropagation(); onClick('pin'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-green-500 transition shadow-sm">
+              <Pin size={14} className={chat.isPinned ? 'fill-current' : ''} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onClick('archive'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-blue-500 transition shadow-sm">
+              {chat.isArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+            </button>
+         </div>
+
+         {/* Mobile View: Dropdown Menu */}
+         <div className="md:hidden top-4 relative">
+            <button 
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <MoreVertical size={20} />
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-[#2A3942] rounded-2xl shadow-2xl z-[60] border border-[var(--border)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onClick('pin'); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-[#202C33] text-gray-700 dark:text-gray-200 transition"
+                >
+                  <Pin size={16} className={chat.isPinned ? 'fill-current text-green-500' : ''} />
+                  {chat.isPinned ? 'Unpin' : 'Pin Chat'}
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onClick('archive'); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-[#202C33] text-gray-700 dark:text-gray-200 border-t border-[var(--border)] transition"
+                >
+                  {chat.isArchived ? <ArchiveRestore size={16} className="text-blue-500" /> : <Archive size={16} />}
+                  {chat.isArchived ? 'Unarchive' : 'Archive'}
+                </button>
+              </div>
+            )}
+         </div>
       </div>
     </div>
   );
