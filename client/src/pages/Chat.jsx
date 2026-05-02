@@ -23,7 +23,7 @@ const notify = (title, body) => {
 };
 
 export default function Chat() {
-  const { user, logout }       = useAuth();
+  const { user, setUser, logout }       = useAuth();
   const { emit, on, off, isConnected, onlineUsers } = useSocket();
   const { dark, toggle }       = useTheme();
   const navigate               = useNavigate();
@@ -40,6 +40,8 @@ export default function Chat() {
   const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [showProfile, setShowProfile]   = useState(false);
   const [initialChat, setInitialChat]   = useState(null);
+
+  const fileInputRef = useRef();
 
   const bottomRef  = useRef();
   const activeChatRef = useRef(null);
@@ -206,6 +208,21 @@ export default function Chat() {
     }
   };
 
+  const handleProfilePicChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      toast.loading('Uploading...', { id: 'upload' });
+      const { data } = await api.patch(`/users/${user.id}/profile-picture`, formData);
+      setUser(data.user);
+      toast.success('Profile picture updated!', { id: 'upload' });
+    } catch (err) {
+      toast.error('Failed to upload profile picture', { id: 'upload' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--bg)]">
@@ -236,19 +253,27 @@ export default function Chat() {
           <span className="text-[10px] md:hidden font-bold">Status</span>
         </button>
 
-        <div className="hidden md:flex mt-auto flex-col gap-4">
-          <button onClick={toggle} className="p-3 text-gray-500 hover:text-green-400">
+        <button onClick={() => setActiveTab('settings')}
+          className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 transition ${activeTab === 'settings' ? 'bg-gray-200 dark:bg-gray-800 text-green-500' : 'text-gray-500 hover:text-green-400'}`}>
+          <Settings size={24} />
+          <span className="text-[10px] md:hidden font-bold">Settings</span>
+        </button>
+
+        <div className="contents md:flex md:mt-auto md:flex-col md:gap-4">
+          <button onClick={toggle} className="flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 text-gray-500 hover:text-green-400">
             {dark ? <Sun size={24} /> : <Moon size={24} />}
+            <span className="text-[10px] md:hidden font-bold">Theme</span>
           </button>
-          <button onClick={() => { logout(); navigate('/login'); }} className="p-3 text-gray-500 hover:text-red-500">
+          <button onClick={() => { logout(); navigate('/login'); }} className="flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 text-gray-500 hover:text-red-500">
             <LogOut size={24} />
+            <span className="text-[10px] md:hidden font-bold">Logout</span>
           </button>
         </div>
       </div>
 
       {/* 2. SIDEBAR CONTENT */}
       <div className={`${(!sidebarOpen && chat && activeTab === 'chats') ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex flex-col bg-white dark:bg-[#111B21] border-r border-[var(--border)] overflow-hidden transition-all duration-300 pb-16 md:pb-0`}>
-        {activeTab === 'chats' ? (
+        {activeTab === 'chats' && (
           <>
             <div className="px-4 py-4 border-b border-[var(--border)]">
                <h2 className="text-xl font-bold dark:text-white">Chats</h2>
@@ -269,7 +294,8 @@ export default function Chat() {
                </button>
             </div>
           </>
-        ) : (
+        )}
+        {activeTab === 'status' && (
           <>
             <div className="px-4 py-4 border-b border-[var(--border)]">
                <h2 className="text-xl font-bold dark:text-white">Status</h2>
@@ -311,6 +337,29 @@ export default function Chat() {
                 {statuses.length === 0 && <div className="p-8 text-center text-gray-500 text-sm">No recent updates</div>}
             </div>
           </>
+        )}
+        {activeTab === 'settings' && (
+           <div className="px-6 py-6">
+              <h2 className="text-2xl font-bold dark:text-white mb-6">Settings</h2>
+              <div className="space-y-6">
+                  {/* Profile Picture Section */}
+                  <div className="bg-gray-50 dark:bg-[#202C33] p-6 rounded-3xl border border-[var(--border)] shadow-sm flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full overflow-hidden bg-green-600 border-2 border-white dark:border-[#202C33] shadow-md flex-shrink-0 relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                        {user.profilePicture ? <img src={user.profilePicture} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-white font-bold text-xl">{user.name?.[0]}</div>}
+                        <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
+                          <span className="text-white text-xs font-bold">EDIT</span>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-white text-lg">{user.name}</p>
+                        <p className="text-xs text-gray-500">Click avatar to update</p>
+                      </div>
+                    </div>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleProfilePicChange} />
+                  </div>
+              </div>
+           </div>
         )}
       </div>
 

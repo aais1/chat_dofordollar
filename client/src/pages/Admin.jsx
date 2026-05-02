@@ -67,11 +67,11 @@ function ChatRow({ chat, selected, onClick }) {
           )}
         </div>
       </button>
-      <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2 bg-gradient-to-l from-gray-100 dark:from-[#2A3942] to-transparent pl-4">
-        <button onClick={(e) => { e.stopPropagation(); onClick('pin'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-green-500 transition">
+      <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-2 bg-gradient-to-l from-gray-100 dark:from-[#2A3942] to-transparent pl-4">
+        <button onClick={(e) => { e.stopPropagation(); onClick('pin'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-green-500 transition shadow-sm">
           <Pin size={14} className={chat.isPinned ? 'fill-current' : ''} />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onClick('archive'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-blue-500 transition">
+        <button onClick={(e) => { e.stopPropagation(); onClick('archive'); }} className="p-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-blue-500 transition shadow-sm">
           {chat.isArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
         </button>
       </div>
@@ -240,7 +240,7 @@ function StatusUploadModal({ onClose, onCreated }) {
 }
 
 export default function Admin() {
-  const { user, logout }       = useAuth();
+  const { user, setUser, logout }       = useAuth();
   const { emit, on, isConnected } = useSocket();
   const { dark, toggle }       = useTheme();
   const navigate               = useNavigate();
@@ -271,6 +271,7 @@ export default function Admin() {
   const [loadingMore, setLoadMore]  = useState(false);
 
   const bottomRef   = useRef();
+  const fileInputRef = useRef();
   const typingTimer = useRef();
   const selectedChatRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -363,7 +364,23 @@ export default function Admin() {
       await api.patch(`/users/${user.id}/about`, { about: tempAbout });
       setAbout(tempAbout);
       setEditingAbout(false);
+      setUser(prev => ({ ...prev, about: tempAbout }));
     } catch (e) { alert('Update failed'); }
+  };
+
+  const handleProfilePicChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      toast.loading('Uploading...', { id: 'upload' });
+      const { data } = await api.patch(`/users/${user.id}/profile-picture`, formData);
+      setUser(data.user);
+      toast.success('Profile picture updated!', { id: 'upload' });
+    } catch (err) {
+      toast.error('Failed to upload profile picture', { id: 'upload' });
+    }
   };
 
   const openChat = async (chat) => {
@@ -592,8 +609,25 @@ export default function Admin() {
 
          {activeTab === 'settings' && (
            <div className="px-6 py-6">
-              <h2 className="text-2xl font-bold dark:text-white mb-6">Settings</h2>
-              <div className="space-y-6">
+               <h2 className="text-2xl font-bold dark:text-white mb-6">Settings</h2>
+               <div className="space-y-6">
+                  {/* Profile Picture Section */}
+                  <div className="bg-gray-50 dark:bg-[#202C33] p-6 rounded-3xl border border-[var(--border)] shadow-sm flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full overflow-hidden bg-green-600 border-2 border-white dark:border-[#202C33] shadow-md flex-shrink-0 relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                        {user.profilePicture ? <img src={user.profilePicture} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-white font-bold text-xl">{user.name?.[0]}</div>}
+                        <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
+                          <Upload size={20} className="text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-white text-lg">{user.name}</p>
+                        <p className="text-xs text-gray-500">Click avatar to update</p>
+                      </div>
+                    </div>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleProfilePicChange} />
+                  </div>
+
                   <div className="bg-gray-50 dark:bg-[#202C33] p-6 rounded-3xl border border-[var(--border)] shadow-sm">
                      <p className="text-[11px] font-bold text-green-500 uppercase mb-3 tracking-widest">Automatic Welcome Message</p>
                      
