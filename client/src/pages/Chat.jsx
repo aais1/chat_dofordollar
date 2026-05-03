@@ -139,6 +139,8 @@ export default function Chat() {
       if (activeChatRef.current?.id === chatId) {
         setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
       }
+      // Decrement unread count for the chat
+      setChats(prev => prev.map(c => c.id === chatId ? { ...c, unreadCount: Math.max(0, c.unreadCount - messageIds.length) } : c));
     });
 
     const offTyping = on('user-typing', () => {

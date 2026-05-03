@@ -309,7 +309,7 @@ export default function Admin() {
   const [aboutMsg, setAbout]         = useState(user?.about || '');
   const [isEditingAbout, setEditingAbout] = useState(false);
   const [tempAbout, setTempAbout] = useState('');
-  const [hasScrolled, setHasScrolled] = useState(false);
+  const [observerEnabled, setObserverEnabled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadMore] = useState(false);
@@ -325,7 +325,13 @@ export default function Admin() {
   const lastChatId = useRef(null);
 
   useEffect(() => {
-    selectedChatRef.current = selectedChat;
+    if (selectedChat) {
+      // Enable observer after a short delay to prevent auto-marking on chat open
+      const timer = setTimeout(() => setObserverEnabled(true), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setObserverEnabled(false);
+    }
   }, [selectedChat]);
 
   useEffect(() => {
@@ -455,7 +461,6 @@ export default function Admin() {
     setSidebarOpen(false);
     setMsgLoad(true);
     setHasMore(true);
-    setHasScrolled(false);
     skipRef.current = 0;
     isInitialLoad.current = true;
     try {
@@ -805,7 +810,7 @@ export default function Admin() {
                   <div 
                       ref={chatContainerRef}
                       className="flex-1 overflow-y-auto px-4 py-5 flex flex-col custom-scrollbar"
-                      onScroll={e => { if (e.target.scrollTop > 0) setHasScrolled(true); if (e.target.scrollTop < 100) loadMore(); }}
+                      onScroll={e => { if (e.target.scrollTop > 0) setObserverEnabled(true); if (e.target.scrollTop < 100) loadMore(); }}
                   >
                      <div className="flex-1" />
                      {loadingMore && (
@@ -816,7 +821,7 @@ export default function Admin() {
                      )}
                      {messages.map((msg, i) => {
                         const prevMsg = messages[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
-                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} enableObserver={hasScrolled}/></div>);
+                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} enableObserver={observerEnabled}/></div>);
                      })}
                      {typing && <TypingIndicator name="User"/>}
                      <div ref={bottomRef} className="h-4"/>

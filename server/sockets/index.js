@@ -175,15 +175,18 @@ export const initSocket = (io) => {
     socket.on('message-read', async ({ chatId, messageIds }) => {
       try {
         if (!messageIds?.length) return;
+        
+        // Mark messages as read
         for (const msgId of messageIds) {
           await db.update(messages).set({ isRead: true, readAt: new Date() })
             .where(eq(messages.id, msgId));
         }
-        // Check if any unread messages remain for this chat and receiver
-        const remainingUnread = await db.select({ count: sql`count(*)` }).from(messages).where(and(eq(messages.chatId, parseInt(chatId)), eq(messages.isRead, false), eq(messages.receiverId, user.id)));
-        if (remainingUnread[0].count === 0) {
-          await db.update(chats).set({ unreadCount: 0 }).where(eq(chats.id, parseInt(chatId)));
-        }
+        
+        // Decrement unread count by the number of messages read
+        await db.update(chats).set({ 
+          unreadCount: sql`GREATEST(0, ${chats.unreadCount} - ${messageIds.length})` 
+        }).where(eq(chats.id, parseInt(chatId)));
+        
         socket.to(`chat:${chatId}`).emit('message-read', { messageIds, chatId });
       } catch (err) {
         console.error('[Socket] message-read error:', err);
