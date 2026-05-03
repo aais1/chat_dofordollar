@@ -125,13 +125,18 @@ export const initSocket = (io) => {
         // Emit the new message to everyone in the room
         io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: user.name });
 
-        // If receiver has a socket but is NOT in the room, send directly
+        // Handle real-time delivery and push notifications
+        let shouldSendPush = true;
+
         if (receiverSocketId) {
           try {
             const recvSock = io.sockets.sockets.get(receiverSocketId);
             const inRoom = recvSock?.rooms?.has(`chat:${chatId}`);
             if (!inRoom) {
               io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: user.name });
+            } else {
+              // User is actively in the chat room, don't send a push notification
+              shouldSendPush = false;
             }
 
             // Tell the SENDER their message was delivered (gray double tick)
@@ -141,19 +146,21 @@ export const initSocket = (io) => {
             if (!delivered) {
               await db.update(messages).set({ isDelivered: true }).where(eq(messages.id, msg.id));
             }
-
-            // Push notification (best-effort)
-            try {
-              await sendPushToUser(receiverId, {
-                title: `New message from ${user.name}`,
-                body: content || `[${messageType}]`,
-                chatId,
-                messageId: msg.id,
-              });
-            } catch (e) { console.error('push send error (socket):', e); }
           } catch (e) {
             console.error('[Socket] failed to notify receiver directly:', e);
           }
+        }
+
+        // Push notification (best-effort)
+        if (shouldSendPush) {
+          try {
+            await sendPushToUser(receiverId, {
+              title: `New message from ${user.name}`,
+              body: content || `[${messageType}]`,
+              chatId,
+              messageId: msg.id,
+            });
+          } catch (e) { console.error('push send error (socket):', e); }
         }
 
         // Notify all admin sockets so the chat list updates in real time

@@ -32,11 +32,16 @@ export const saveSubscription = async (req, res) => {
 export const sendPushToUser = async (userId, payload) => {
   try {
     const [row] = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
-    if (!row) return;
+    if (!row) {
+      console.log(`[Push] No subscription found for userId: ${userId}`);
+      return;
+    }
     const sub = JSON.parse(row.subscription);
+    console.log(`[Push] Sending notification to userId: ${userId}...`);
     await webpush.sendNotification(sub, JSON.stringify(payload));
+    console.log(`[Push] Notification sent successfully to userId: ${userId}`);
   } catch (err) {
-    console.error('sendPushToUser error:', err);
+    console.error(`[Push] Error sending to userId ${userId}:`, err);
   }
 };
 
