@@ -46,7 +46,7 @@ export default function AdminLogin() {
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8">
           {/* Mode toggle */}
           <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
-            {['email', 'phone'].map(m => (
+            {['email'].map(m => (
               <button key={m} onClick={() => setMode(m)}
                 className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
                   mode === m ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500'

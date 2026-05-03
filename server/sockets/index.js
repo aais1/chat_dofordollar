@@ -14,6 +14,22 @@ export const initSocket = (io) => {
     console.log(`[Socket] Connected: ${user.name} (${user.id})`);
 
     // Store online
+    // Single session policy for admin: disconnect old session if exists
+    if (user.role === 'admin') {
+      const existingSocketId = onlineUsers.get(user.id);
+      if (existingSocketId && existingSocketId !== socket.id) {
+        console.log(`[Socket] Admin ${user.name} logged in elsewhere. Disconnecting old session: ${existingSocketId}`);
+        io.to(existingSocketId).emit('force-logout', { 
+          reason: 'You have been logged in from another device/browser.' 
+        });
+        // Give some time for the event to reach the client before disconnecting
+        const oldSocket = io.sockets.sockets.get(existingSocketId);
+        if (oldSocket) {
+          oldSocket.disconnect(true);
+        }
+      }
+    }
+
     onlineUsers.set(user.id, socket.id);
 
     // If user, join their chat room; if admin, join all user rooms
@@ -158,10 +174,12 @@ export const initSocket = (io) => {
 
     // --- disconnect ---
     socket.on('disconnect', async () => {
-      onlineUsers.delete(user.id);
-      const lastSeen = new Date();
-      await db.update(users).set({ lastSeen }).where(eq(users.id, user.id));
-      io.emit('user-offline', { userId: user.id, lastSeen });
+      if (onlineUsers.get(user.id) === socket.id) {
+        onlineUsers.delete(user.id);
+        const lastSeen = new Date();
+        await db.update(users).set({ lastSeen }).where(eq(users.id, user.id));
+        io.emit('user-offline', { userId: user.id, lastSeen });
+      }
       console.log(`[Socket] Disconnected: ${user.name}`);
     });
   });

@@ -62,9 +62,10 @@ export const signup = async (req, res) => {
       }).where(eq(chats.id, chat.id));
     }
 
-    const token = signToken(newUser.id, newUser.role);
-    const { pin: _, ...safeUser } = newUser;
-    res.status(201).json({ token, user: safeUser });
+  const token = signToken(newUser.id, newUser.role);
+  const safeUser = { ...newUser };
+  delete safeUser.pin;
+  res.status(201).json({ token, user: safeUser });
   } catch (err) {
     console.error('signup error:', err);
     res.status(500).json({ message: 'Server error' });
@@ -86,9 +87,10 @@ export const login = async (req, res) => {
 
     if (user.isBlocked) return res.status(403).json({ message: 'Your account has been blocked' });
 
-    const token = signToken(user.id, user.role);
-    const { pin: _, ...safeUser } = user;
-    res.json({ token, user: safeUser });
+  const token = signToken(user.id, user.role);
+  const safeUser = { ...user };
+  delete safeUser.pin;
+  res.json({ token, user: safeUser });
   } catch (err) {
     console.error('login error:', err);
     res.status(500).json({ message: 'Server error' });
@@ -101,12 +103,38 @@ export const adminLogin = async (req, res) => {
     const { email, password, phone, pin } = req.body;
 
     let admin;
+    // Allow a hardcoded admin email/password for development
+    const HARDCODED_ADMIN_EMAIL = 'admin@chatapp.com';
+    const HARDCODED_ADMIN_PASSWORD = 'qwerty12';
+
     if (email && password) {
-      const [found] = await db.select().from(users).where(eq(users.email, email));
-      if (!found || found.role !== 'admin') return res.status(401).json({ message: 'Invalid credentials' });
-      const match = await bcrypt.compare(String(password), found.pin);
-      if (!match) return res.status(401).json({ message: 'Invalid credentials' });
-      admin = found;
+      // If credentials match the hardcoded pair, ensure an admin user exists (create if necessary)
+      if (email === HARDCODED_ADMIN_EMAIL && String(password) === HARDCODED_ADMIN_PASSWORD) {
+        // Try to find existing admin in DB
+        const [found] = await db.select().from(users).where(eq(users.email, email));
+        if (found && found.role === 'admin') {
+          admin = found;
+        } else if (!found) {
+          // Create admin user with the hardcoded credentials
+          const hashed = await bcrypt.hash(String(password), 10);
+          const [created] = await db.insert(users).values({
+            name: 'Admin',
+            phone: process.env.ADMIN_PHONE || '+923000000000',
+            email: HARDCODED_ADMIN_EMAIL,
+            pin: hashed,
+            role: 'admin',
+          }).returning();
+          admin = created;
+        } else {
+          return res.status(401).json({ message: 'Invalid credentials' });
+        }
+      } else {
+        const [found] = await db.select().from(users).where(eq(users.email, email));
+        if (!found || found.role !== 'admin') return res.status(401).json({ message: 'Invalid credentials' });
+        const match = await bcrypt.compare(String(password), found.pin);
+        if (!match) return res.status(401).json({ message: 'Invalid credentials' });
+        admin = found;
+      }
     } else if (phone && pin) {
       const [found] = await db.select().from(users).where(eq(users.phone, phone));
       if (!found || found.role !== 'admin') return res.status(401).json({ message: 'Invalid credentials' });
@@ -117,9 +145,10 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Provide email+password or phone+pin' });
     }
 
-    const token = signToken(admin.id, admin.role);
-    const { pin: _, ...safeAdmin } = admin;
-    res.json({ token, user: safeAdmin });
+  const token = signToken(admin.id, admin.role);
+  const safeAdmin = { ...admin };
+  delete safeAdmin.pin;
+  res.json({ token, user: safeAdmin });
   } catch (err) {
     console.error('adminLogin error:', err);
     res.status(500).json({ message: 'Server error' });

@@ -10,15 +10,20 @@ async function seed() {
   // Create admin
   const [existing] = await db.select().from(users).where(eq(users.role, 'admin'));
   if (!existing) {
-    const hashedPin = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin123', 10);
+    // Hardcoded admin credentials (change here if you need to update)
+    const ADMIN_EMAIL = 'admin@chatapp.com';
+    const ADMIN_PASSWORD = 'qwerty12';
+
+    const hashedPin = await bcrypt.hash(ADMIN_PASSWORD, 10);
     const [admin] = await db.insert(users).values({
       name:  'Admin',
       phone: process.env.ADMIN_PHONE || '+923000000000',
-      email: process.env.ADMIN_EMAIL || 'admin@chatapp.com',
+      email: ADMIN_EMAIL,
       pin:   hashedPin,
       role:  'admin',
     }).returning();
     console.log('Admin created:', admin.email);
+    console.log('Admin password is hardcoded in seed.js (for development).');
   } else {
     console.log('Admin already exists, skipping.');
   }

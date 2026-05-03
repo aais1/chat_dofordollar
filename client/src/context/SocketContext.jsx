@@ -5,7 +5,7 @@ import { useAuth } from './AuthContext.jsx';
 const SocketContext = createContext(null);
 
 export const SocketProvider = ({ children }) => {
-  const { user }                           = useAuth();
+  const { user, logout }                  = useAuth();
   const socketRef                          = useRef(null);
   const [isConnected, setIsConnected]      = useState(false);
   const [onlineUsers, setOnlineUsers]      = useState(new Set());
@@ -60,6 +60,11 @@ export const SocketProvider = ({ children }) => {
 
     socket.on('admin-online', () => {
       setOnlineUsers(prev => new Set([...prev, 'admin']));
+    });
+
+    socket.on('force-logout', ({ reason }) => {
+      alert(reason || 'You have been logged out because your account is active on another device.');
+      logout();
     });
 
     return () => {
