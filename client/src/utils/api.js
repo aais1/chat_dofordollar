@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://api-chatapp.dofordollars.com/api',
+  baseURL: 'https://api.chatyapp.online/api',
   timeout: 15000,
 });
 

@@ -101,12 +101,12 @@ export default function Login() {
               Create account
             </Link>
           </p>
-          <p className="mt-2 text-center text-xs text-gray-400">
+          {/* <p className="mt-2 text-center text-xs text-gray-400">
             Admin?{' '}
             <Link to="/admin/login" className="text-green-500 hover:underline">
               Admin login
             </Link>
-          </p>
+          </p> */}
         </div>
       </div>
     </div>

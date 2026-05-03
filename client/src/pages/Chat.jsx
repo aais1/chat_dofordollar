@@ -149,8 +149,14 @@ export default function Chat() {
         setInitialChat(prev => prev ? ({ ...prev, admin: { ...prev.admin, ...updates } }) : prev);
       }
     });
+    
+    const offDelete = on('message-deleted', ({ messageId, chatId }) => {
+      if (activeChatRef.current?.id === chatId) {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+      }
+    });
 
-    return () => { offMsg(); offDelivered(); offRead(); offTyping(); offStopTyping(); offProfile(); };
+    return () => { offMsg(); offDelivered(); offRead(); offTyping(); offStopTyping(); offProfile(); offDelete(); };
   }, [on, emit, user.id, isConnected]);
 
   const handleSend = useCallback(async (data) => {

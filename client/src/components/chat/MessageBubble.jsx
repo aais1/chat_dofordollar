@@ -1,14 +1,25 @@
+import { useState } from 'react';
 import { formatMessageTime } from '../../utils/time.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { Check, CheckCheck } from 'lucide-react';
+import { useSocket } from '../../context/SocketContext.jsx';
+import { Check, CheckCheck, MoreVertical, Trash2 } from 'lucide-react';
 
 export default function MessageBubble({ msg }) {
   const { user } = useAuth();
+  const { emit } = useSocket();
+  const [showOptions, setShowOptions] = useState(false);
   const isMine = msg.senderId === user.id;
+  const isAdmin = user.role === 'admin';
+
+  const handleDelete = () => {
+    if (confirm('Delete this message for everyone?')) {
+      emit('delete-message', { messageId: msg.id, chatId: msg.chatId });
+    }
+    setShowOptions(false);
+  };
 
   const ReadReceipt = () => {
     if (!isMine) return null;
-    // Blue checkmarks for read, gray for delivered/sent
     if (msg.isRead) return <CheckCheck size={14} className="text-blue-500 drop-shadow-sm" />;
     if (msg.isDelivered) return <CheckCheck size={14} className="text-gray-500" />;
     return <Check size={14} className="text-gray-400" />;
@@ -38,18 +49,38 @@ export default function MessageBubble({ msg }) {
   };
 
   return (
-    <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-1.5 msg-slide-in group`}>
+    <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-1.5 msg-slide-in group relative`}>
       <div className={`
         relative max-w-[75%] min-w-[64px] px-2.5 py-1.5 rounded-2xl shadow-sm transition-all
         ${isMine
-          ? 'user-bubble rounded-br-sm text-black dark:text-gray-100' // Dark text for light green, light text for dark green
+          ? 'user-bubble rounded-br-sm text-black dark:text-gray-100'
           : 'admin-bubble dark:bg-[#1F2C34] rounded-bl-sm text-black dark:text-gray-100'}
       `}>
-        {/* Subtle tail effect placeholder or just rounded corners */}
+        {isAdmin && (
+          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <button 
+              onClick={() => setShowOptions(!showOptions)}
+              className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-500"
+            >
+              <MoreVertical size={14} />
+            </button>
+            {showOptions && (
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-[#233138] shadow-xl rounded-lg py-1 z-20 border border-gray-100 dark:border-gray-800 min-w-[120px]">
+                <button 
+                  onClick={handleDelete}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors font-medium"
+                >
+                  <Trash2 size={12} /> Delete Message
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <MediaContent />
         
         {msg.content && (
-          <p className="text-[14px] leading-[1.4] text-black dark:text-white break-words whitespace-pre-wrap px-0.5 font-normal">
+          <p className="text-[14px] leading-[1.4] text-black dark:text-white break-words whitespace-pre-wrap px-0.5 font-normal pr-4">
             {msg.content}
           </p>
         )}
@@ -61,6 +92,13 @@ export default function MessageBubble({ msg }) {
           <ReadReceipt />
         </div>
       </div>
+      
+      {showOptions && (
+        <div 
+          className="fixed inset-0 z-[15]" 
+          onClick={() => setShowOptions(false)} 
+        />
+      )}
     </div>
   );
 }

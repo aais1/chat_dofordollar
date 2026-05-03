@@ -394,7 +394,14 @@ export default function Admin() {
 
     const offStopTyping = on('user-stop-typing', () => setTyping(false));
 
-    return () => { offMsg(); offRead(); offTyping(); offStopTyping(); };
+    const offDelete = on('message-deleted', ({ messageId, chatId, lastMessage, lastMessageAt }) => {
+      if (selectedChatRef.current?.id === chatId) {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+      }
+      setChats(prev => prev.map(c => c.id === chatId ? { ...c, lastMessage, lastMessageAt } : c));
+    });
+
+    return () => { offMsg(); offRead(); offTyping(); offStopTyping(); offDelete(); };
   }, [on, emit, user.id, isConnected]);
 
   const updateWelcome = async () => {
