@@ -6,7 +6,7 @@ import { useSocket } from '../context/SocketContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import api from '../utils/api.js';
 import { uploadUnsigned } from '../utils/cloudinary.js';
-import { isSameDay, formatChatDate, formatLastSeen } from '../utils/time.js';
+import { isSameDay, formatChatDate } from '../utils/time.js';
 import MessageBubble from '../components/chat/MessageBubble.jsx';
 import MessageInput from '../components/chat/MessageInput.jsx';
 import DateSeparator from '../components/chat/DateSeparator.jsx';
@@ -309,10 +309,11 @@ export default function Admin() {
   const [tempWelcome, setTempWelcome] = useState('');
   const [aboutMsg, setAbout]         = useState(user?.about || '');
   const [isEditingAbout, setEditingAbout] = useState(false);
-  const [tempAbout, setTempAbout]     = useState('');
-  const [sidebarOpen, setSidebar]   = useState(true);
-  const [hasMore, setHasMore]       = useState(true);
-  const [loadingMore, setLoadMore]  = useState(false);
+  const [tempAbout, setTempAbout] = useState('');
+  const [hasScrolled, setHasScrolled] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadMore] = useState(false);
 
   const bottomRef   = useRef();
   const fileInputRef = useRef();
@@ -450,9 +451,10 @@ export default function Admin() {
 
   const openChat = async (chat) => {
     setSelected(chat);
-    setSidebar(false);
+    setSidebarOpen(false);
     setMsgLoad(true);
     setHasMore(true);
+    setHasScrolled(false);
     skipRef.current = 0;
     isInitialLoad.current = true;
     try {
@@ -780,7 +782,7 @@ export default function Admin() {
          {selectedChat ? (
            <>
               <div className="flex items-center gap-3 px-4 py-3 bg-[#202C33] border-b border-[#2A3942] z-10 shadow-lg cursor-pointer hover:bg-[#2A3942] transition" onClick={() => setShowUserProfile(true)}>
-                 <button onClick={(e) => { e.stopPropagation(); setSidebar(true); }} className="md:hidden p-1 text-gray-400">
+                 <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }} className="md:hidden p-1 text-gray-400">
                      <ChevronLeft size={24}/>
                  </button>
                  <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold overflow-hidden">
@@ -802,7 +804,7 @@ export default function Admin() {
                   <div 
                       ref={chatContainerRef}
                       className="flex-1 overflow-y-auto px-4 py-5 flex flex-col custom-scrollbar"
-                      onScroll={e => { if (e.target.scrollTop < 100) loadMore(); }}
+                      onScroll={e => { if (e.target.scrollTop > 0) setHasScrolled(true); if (e.target.scrollTop < 100) loadMore(); }}
                   >
                      <div className="flex-1" />
                      {loadingMore && (
@@ -813,7 +815,7 @@ export default function Admin() {
                      )}
                      {messages.map((msg, i) => {
                         const prevMsg = messages[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
-                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg}/></div>);
+                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} enableObserver={hasScrolled}/></div>);
                      })}
                      {typing && <TypingIndicator name="User"/>}
                      <div ref={bottomRef} className="h-4"/>
@@ -863,11 +865,6 @@ export default function Admin() {
               <div className="bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
                  <p className="text-[11px] font-bold text-green-500 uppercase mb-2 tracking-widest">About</p>
                  <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{selectedChat.userAbout || 'Hey there! I am using ChatApp.'}</p>
-              </div>
-
-              <div className="bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
-                 <p className="text-[11px] font-bold text-gray-500 uppercase mb-2 tracking-widest">Last Seen</p>
-                 <p className="text-sm text-gray-800 dark:text-gray-200">{formatLastSeen(selectedChat.userLastSeen)}</p>
               </div>
 
               <div className="bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">

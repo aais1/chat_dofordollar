@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import api from '../utils/api.js';
-import { isSameDay, formatLastSeen, formatChatDate } from '../utils/time.js';
+import { isSameDay, formatChatDate } from '../utils/time.js';
 import MessageBubble from '../components/chat/MessageBubble.jsx';
 import MessageInput from '../components/chat/MessageInput.jsx';
 import DateSeparator from '../components/chat/DateSeparator.jsx';
@@ -36,10 +36,11 @@ export default function Chat() {
   const [loading, setLoading]   = useState(true);
   const [loadingMore, setLoadMore] = useState(false);
   const [hasMore, setHasMore]   = useState(true);
+  const [hasScrolled, setHasScrolled] = useState(false);
+  const [initialChat, setInitialChat] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [viewerStatus, setViewerStatus] = useState(null);
-  const [sidebarOpen, setSidebarOpen]   = useState(false);
-  const [showProfile, setShowProfile]   = useState(false);
-  const [initialChat, setInitialChat]   = useState(null);
 
   const fileInputRef = useRef();
 
@@ -400,7 +401,7 @@ export default function Chat() {
                 <div className="flex-1 min-w-0">
                    <p className="font-bold dark:text-white text-[15px] leading-tight">{chat?.admin?.name || 'Admin'}</p>
                    <p className="text-[11px] text-gray-500 font-medium">
-                      {adminOnline ? <span className="text-green-500 font-bold">Online</span> : formatLastSeen(chat?.admin?.lastSeen)}
+                      {adminOnline ? <span className="text-green-500 font-bold">Online</span> : ''}
                    </p>
                 </div>
              </div>
@@ -410,6 +411,7 @@ export default function Chat() {
                 ref={chatContainerRef}
                 className="flex-1 overflow-y-auto px-4 py-4 flex flex-col custom-scrollbar" 
                 onScroll={e => {
+                  if (e.target.scrollTop > 0) setHasScrolled(true);
                   if (e.target.scrollTop < 100) loadMore();
                 }}
               >
@@ -426,7 +428,7 @@ export default function Chat() {
                   return (
                     <div key={msg.id}>
                       {showDate && <DateSeparator date={msg.createdAt} />}
-                      <MessageBubble msg={msg} />
+                      <MessageBubble msg={msg} enableObserver={hasScrolled} />
                     </div>
                   );
                 })}
@@ -467,7 +469,7 @@ export default function Chat() {
               {chat.admin?.profilePicture ? <img src={chat.admin.profilePicture} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-4xl text-white font-bold">{chat.admin?.name?.[0]}</div>}
             </div>
             <h3 className="text-2xl font-bold dark:text-white mb-1">{chat.admin?.name || 'Administrator'}</h3>
-            <p className="text-sm text-gray-500 font-medium mb-8">{adminOnline ? 'Online' : formatLastSeen(chat.admin?.lastSeen)}</p>
+            <p className="text-sm text-gray-500 font-medium mb-8">{adminOnline ? 'Online' : ''}</p>
             
             <div className="w-full bg-gray-50 dark:bg-[#202C33] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm text-left">
                <p className="text-[11px] font-bold text-green-500 uppercase mb-2 tracking-widest">About</p>

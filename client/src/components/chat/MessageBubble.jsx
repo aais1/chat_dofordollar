@@ -6,7 +6,7 @@ import { Check, CheckCheck, MoreVertical, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api.js';
 
-export default function MessageBubble({ msg }) {
+export default function MessageBubble({ msg, enableObserver = true }) {
   const { user } = useAuth();
   const { emit } = useSocket();
   const [showOptions, setShowOptions] = useState(false);
@@ -16,21 +16,18 @@ export default function MessageBubble({ msg }) {
   const ref = useRef();
 
   useEffect(() => {
-    if (msg.isRead || msg.senderId === user.id) return;
+    if (msg.isRead || msg.senderId === user.id || !enableObserver) return;
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
-          // Delay to prevent automatic marking on initial load
-          setTimeout(() => {
-            emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
-            observer.unobserve(entry.target);
-          }, 1000);
+          emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+          observer.unobserve(entry.target);
         }
       });
     }, { threshold: 0.5 });
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
-  }, [msg.id, msg.isRead, msg.senderId, user.id, emit]);
+  }, [msg.id, msg.isRead, msg.senderId, user.id, emit, enableObserver]);
 
   const handleDelete = () => {
     // Proceed immediately without a blocking browser confirm dialog

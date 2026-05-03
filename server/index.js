@@ -35,6 +35,7 @@ const allowedOrigins = [
   'https://chatyapp.online',
   'https://www.chatyapp.online',
   'http://localhost:5173',
+    'http://localhost:5173/',
 ];
 
 app.use(cors({
