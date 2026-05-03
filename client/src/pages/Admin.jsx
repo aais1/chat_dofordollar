@@ -389,8 +389,8 @@ export default function Admin() {
         if (selectedChatRef.current?.id === chatId) {
           setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
         }
-        // Clear unread count for the chat in the list when read arrives
-        setChats(prev => prev.map(c => c.id === chatId ? { ...c, unreadCount: 0 } : c));
+        // Decrement unread count for the chat
+        setChats(prev => prev.map(c => c.id === chatId ? { ...c, unreadCount: Math.max(0, c.unreadCount - messageIds.length) } : c));
       } catch (e) { console.error('message-read admin handler error:', e); }
     });
 
@@ -461,10 +461,7 @@ export default function Admin() {
       skipRef.current = res.data.messages.length;
       if (res.data.messages.length < 50) setHasMore(false);
       
-      await api.patch(`/chats/${chat.id}/read`);
-      setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
       emit('join-chat', { chatId: chat.id });
-      emit('message-read', { chatId: chat.id, messageIds: res.data.messages.filter(m => !m.isRead && m.senderId !== user.id).map(m => m.id) });
     } catch (err) { console.error(err); } finally { setMsgLoad(false); }
   };
 

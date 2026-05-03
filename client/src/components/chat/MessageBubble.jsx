@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { formatMessageTime } from '../../utils/time.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSocket } from '../../context/SocketContext.jsx';
@@ -8,11 +8,26 @@ import api from '../../utils/api.js';
 
 export default function MessageBubble({ msg }) {
   const { user } = useAuth();
-  const { emit, isConnected } = useSocket();
+  const { emit } = useSocket();
   const [showOptions, setShowOptions] = useState(false);
   const [dbgAction, setDbgAction] = useState(null);
   const isMine = msg.senderId === user.id;
   const isAdmin = user.role === 'admin';
+  const ref = useRef();
+
+  useEffect(() => {
+    if (msg.isRead || msg.senderId === user.id) return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.5 });
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [msg.id, msg.isRead, msg.senderId, user.id, emit]);
 
   const handleDelete = () => {
     // Proceed immediately without a blocking browser confirm dialog
@@ -84,7 +99,7 @@ export default function MessageBubble({ msg }) {
   };
 
   return (
-    <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-1.5 msg-slide-in group relative`}>
+    <div ref={ref} className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-1.5 msg-slide-in group relative`}>
       <div className={`
         relative max-w-[75%] min-w-[64px] px-2.5 py-1.5 rounded-2xl shadow-sm transition-all
         ${isMine

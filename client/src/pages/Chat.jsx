@@ -77,11 +77,8 @@ export default function Chat() {
         skipRef.current = msgsRes.data.messages.length;
         if (msgsRes.data.messages.length < 50) setHasMore(false);
 
-        // Mark as read
-        await api.patch(`/chats/${chatRes.data.chat.id}/read`);
         isInitialLoad.current = true; // Reset for initial scroll
         emit('join-chat', { chatId: chatRes.data.chat.id });
-        emit('message-read', { chatId: chatRes.data.chat.id, messageIds: msgsRes.data.messages.filter(m => !m.isRead && m.senderId !== user.id).map(m => m.id) });
       } catch (err) {
         console.error(err);
       } finally {
