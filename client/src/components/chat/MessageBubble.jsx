@@ -57,17 +57,18 @@ export default function MessageBubble({ msg }) {
           : 'admin-bubble dark:bg-[#1F2C34] rounded-bl-sm text-black dark:text-gray-100'}
       `}>
         {isAdmin && (
-          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <div className="absolute top-1 right-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
             <button 
               onClick={() => setShowOptions(!showOptions)}
-              className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-500"
+              className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 touch-manipulation"
+              aria-label="Message options"
             >
-              <MoreVertical size={14} />
+              <MoreVertical size={16} />
             </button>
             {showOptions && (
               <div className="absolute right-0 top-full mt-1 bg-white dark:bg-[#233138] shadow-xl rounded-lg py-1 z-20 border border-gray-100 dark:border-gray-800 min-w-[120px]">
                 <button 
-                  onClick={handleDelete}
+                  onClick={(e) => { e.stopPropagation(); console.log('[Client] delete-message emit', { messageId: msg.id, chatId: msg.chatId }); handleDelete(); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors font-medium"
                 >
                   <Trash2 size={12} /> Delete Message
