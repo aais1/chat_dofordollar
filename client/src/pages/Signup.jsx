@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Phone, Lock, User, Eye, EyeOff, MessageCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function Signup() {
   const { signup } = useAuth();
@@ -23,7 +24,15 @@ export default function Signup() {
       await signup(form.name, form.phone, form.pin);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Signup failed');
+      const msg = err.response?.data?.message || 'Signup failed';
+      // If phone already registered, redirect user to login and show helpful feedback
+      if (err.response?.status === 409) {
+        toast.error('Phone number already registered — please sign in');
+        // pass the phone so the login form can prefill it and show a banner
+        navigate('/login', { state: { fromSignupConflict: true, phone: form.phone } });
+        return;
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,8 @@ import { db } from '../config/db.js';
 import { chats, messages, users, labels, chatLabels } from '../models/schema.js';
 import { eq, desc, asc, lt, and, sql, inArray } from 'drizzle-orm';
 import { getIO } from '../sockets/broadcast.js';
+import { onlineUsers } from '../sockets/index.js';
+import { sendPushToUser } from './push.controller.js';
 
 // GET /api/chats/my-chat  (user)
 export const getMyChat = async (req, res) => {
@@ -168,6 +170,22 @@ export const sendMessage = async (req, res) => {
       isActive:      true,
     }).where(eq(chats.id, parseInt(chatId)));
 
+    // Broadcast via socket server (if available) so connected clients see the new message live
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: req.user.name });
+        // If receiver is online on a different socket, send directly to them as well
+        try {
+          const receiverSocketId = onlineUsers.get(receiverId);
+          if (receiverSocketId) {
+            io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
+            io.to(receiverSocketId).emit('message-delivered', { messageId: msg.id });
+          }
+        } catch (e) { console.error('direct notify error:', e); }
+      }
+    } catch (err) { console.error('broadcast sendMessage error:', err); }
+
     res.status(201).json({ message: msg });
   } catch (err) {
     console.error('sendMessage error:', err);
@@ -179,14 +197,25 @@ export const sendMessage = async (req, res) => {
 export const markAsRead = async (req, res) => {
   try {
     const { chatId } = req.params;
-    await db.update(messages).set({
-      isRead: true,
-      readAt: new Date(),
-    }).where(
-      and(eq(messages.chatId, parseInt(chatId)), eq(messages.receiverId, req.user.id))
-    );
+    // Find unread messages for this chat that were received by the current user
+    const unreadMsgs = await db.select().from(messages).where(and(eq(messages.chatId, parseInt(chatId)), eq(messages.receiverId, req.user.id), eq(messages.isRead, false)));
+    const messageIds = unreadMsgs.map(m => m.id);
+
+    if (messageIds.length > 0) {
+      await db.update(messages).set({ isRead: true, readAt: new Date() }).where(inArray(messages.id, messageIds));
+    }
+
     await db.update(chats).set({ unreadCount: 0 }).where(eq(chats.id, parseInt(chatId)));
-    res.json({ success: true });
+
+    // Notify via sockets so other clients (admin or user) can mark messages as read
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`chat:${chatId}`).emit('message-read', { chatId, messageIds });
+      }
+    } catch (err) { console.error('broadcast read error:', err); }
+
+    res.json({ success: true, messageIds });
   } catch (err) {
     console.error('markAsRead error:', err);
     res.status(500).json({ message: 'Server error' });

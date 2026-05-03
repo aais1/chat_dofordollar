@@ -1,16 +1,28 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Phone, Lock, MessageCircle, Eye, EyeOff } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate  = useNavigate();
-  const [phone, setPhone]       = useState('');
+  const location = useLocation();
+  const [phone, setPhone]       = useState(location.state?.phone || '');
   const [pin, setPin]           = useState('');
   const [showPin, setShowPin]   = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const [banner, setBanner]     = useState('');
+
+  useEffect(() => {
+    // If navigated from a signup conflict, show a helpful banner and toast
+    if (location.state?.fromSignupConflict) {
+      const message = 'Phone already registered. Please sign in.';
+      setBanner(message);
+      toast.error(message);
+    }
+  }, [location.state]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,6 +49,11 @@ export default function Login() {
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8">
+          {banner && (
+            <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl text-yellow-700 dark:text-yellow-300 text-sm">
+              {banner}
+            </div>
+          )}
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
               {error}

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../utils/api.js';
+import { registerServiceWorkerAndSubscribe } from '../utils/push.js';
 
 const AuthContext = createContext(null);
 
@@ -20,6 +21,12 @@ export const AuthProvider = ({ children }) => {
     const res = await api.post('/auth/login', { phone, pin });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
+    // Try to register push subscription after login
+    try {
+      const { data } = await api.get('/push/vapidPublicKey');
+      const sub = await registerServiceWorkerAndSubscribe(data.publicKey);
+      if (sub) await api.post('/push/subscribe', { subscription: sub.subscription });
+    } catch (e) { /* non-fatal */ }
     return res.data.user;
   }, []);
 
@@ -34,6 +41,12 @@ export const AuthProvider = ({ children }) => {
     const res = await api.post('/auth/signup', { name, phone, pin });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
+    // Try to register push subscription after signup
+    try {
+      const { data } = await api.get('/push/vapidPublicKey');
+      const sub = await registerServiceWorkerAndSubscribe(data.publicKey);
+      if (sub) await api.post('/push/subscribe', { subscription: sub.subscription });
+    } catch (e) { /* non-fatal */ }
     return res.data.user;
   }, []);
 

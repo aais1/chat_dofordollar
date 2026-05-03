@@ -1,8 +1,9 @@
 import { socketAuth } from '../middleware/auth.js';
 import { db } from '../config/db.js';
 import { messages, chats, users } from '../models/schema.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { setIO } from './broadcast.js';
+import { sendPushToUser } from '../controllers/push.controller.js';
 
 // Map userId -> socketId for online tracking
 const onlineUsers = new Map();
@@ -53,6 +54,42 @@ export const initSocket = (io) => {
         socket.join(`chat:${c.id}`);
       }
       io.emit('admin-online');
+
+      // On admin connect, mark any previously undelivered messages (to this admin) as delivered
+      try {
+        const undelivered = await db.select().from(messages).where(and(eq(messages.receiverId, user.id), eq(messages.isDelivered, false)));
+        if (undelivered.length > 0) {
+          const ids = undelivered.map(m => m.id);
+          await db.update(messages).set({ isDelivered: true }).where(inArray(messages.id, ids));
+          // Notify admin socket about delivered messages
+          for (const id of ids) {
+            io.to(socket.id).emit('message-delivered', { messageId: id });
+          }
+        }
+        // Also fetch unread messages (isRead = false) that arrived while admin was offline
+        const unread = await db.select({
+          id: messages.id,
+          chatId: messages.chatId,
+          senderId: messages.senderId,
+          receiverId: messages.receiverId,
+          content: messages.content,
+          messageType: messages.messageType,
+          mediaUrl: messages.mediaUrl,
+          isDelivered: messages.isDelivered,
+          isRead: messages.isRead,
+          createdAt: messages.createdAt,
+          senderName: users.name,
+        }).from(messages).leftJoin(users, eq(messages.senderId, users.id)).where(and(eq(messages.receiverId, user.id), eq(messages.isRead, false)));
+
+        if (unread.length > 0) {
+          // Emit each unread message to the admin socket so the admin UI can show them immediately
+          for (const m of unread) {
+            io.to(socket.id).emit('receive-message', m);
+          }
+        }
+      } catch (e) {
+        console.error('[Socket] admin deliver-mark failed:', e);
+      }
     }
 
     // --- send-message ---
@@ -70,6 +107,19 @@ export const initSocket = (io) => {
 
         const receiverId = user.role === 'admin' ? chat.userId : chat.adminId;
 
+        // Decide delivery/unread behavior based on whether receiver is connected and in the chat room
+        const receiverSocketId = onlineUsers.get(receiverId);
+        let delivered = false;
+        let incrementUnread = true;
+        if (receiverSocketId) {
+          delivered = true; // receiver has a socket connection
+          const recvSock = io.sockets.sockets.get(receiverSocketId);
+          if (recvSock && recvSock.rooms && recvSock.rooms.has(`chat:${chatId}`)) {
+            // Receiver is currently in the chat room -> they will see the message; don't increment unread
+            incrementUnread = false;
+          }
+        }
+
         const [msg] = await db.insert(messages).values({
           chatId,
           senderId:    user.id,
@@ -77,24 +127,35 @@ export const initSocket = (io) => {
           content:     content || null,
           messageType,
           mediaUrl:    mediaUrl || null,
-          isDelivered: onlineUsers.has(receiverId),
+          isDelivered: delivered,
         }).returning();
 
-        // Update chat last message
+        // Update chat last message and conditionally increment unread count
         const lastMsg = content || `[${messageType}]`;
         await db.update(chats).set({
           lastMessage:   lastMsg,
           lastMessageAt: new Date(),
           isActive:      true,
+          unreadCount:   incrementUnread ? sql`${chats.unreadCount} + 1` : chats.unreadCount,
         }).where(eq(chats.id, chatId));
 
-        // Emit to room
+        // Emit to room (for clients who have joined)
         io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: user.name });
 
-        // Mark delivered if receiver is online
-        if (onlineUsers.has(receiverId)) {
-          await db.update(messages).set({ isDelivered: true }).where(eq(messages.id, msg.id));
-          io.to(`chat:${chatId}`).emit('message-delivered', { messageId: msg.id });
+        // If receiver has a socket and is not in the room, notify them directly
+        if (receiverSocketId) {
+          try {
+            io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: user.name });
+            io.to(receiverSocketId).emit('message-delivered', { messageId: msg.id });
+            // Mark delivered in DB (if not already)
+            if (!delivered) {
+              await db.update(messages).set({ isDelivered: true }).where(eq(messages.id, msg.id));
+            }
+            // Best-effort: send web-push too
+            try { await sendPushToUser(receiverId, { title: `New message from ${user.name}`, body: content || `[${messageType}]`, chatId, messageId: msg.id }); } catch (e) { console.error('push send error (socket):', e); }
+          } catch (e) {
+            console.error('[Socket] failed to notify receiver directly:', e);
+          }
         }
 
         ack?.({ success: true, message: msg });

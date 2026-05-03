@@ -6,6 +6,14 @@ import cors from 'cors';
 
 import { initSocket } from './sockets/index.js';
 import { startStatusCleanupJob } from './jobs/cleanupStatuses.js';
+import webpush from 'web-push';
+
+// Hardcoded VAPID keys (development). Move to env for production.
+const VAPID_SUBJECT = 'mailto:aaisali228@gmail.com';
+const VAPID_PUBLIC_KEY = 'BDJFeCC1ilNK1w8J-IvPFsCDF8brufd8uxPpmb12hFj8_GXE_tbSBoP1hfEvsFMV1fHA96yiQVHP-CAvocj8dXY';
+const VAPID_PRIVATE_KEY = 'jCm4qymIDwUsordGTdlm-ss5sVkFD8FAWmHmpOK4vEM';
+
+webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
 // Routes
 import authRoutes    from './routes/auth.routes.js';

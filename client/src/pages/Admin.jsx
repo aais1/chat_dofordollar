@@ -373,6 +373,7 @@ export default function Admin() {
         emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
       } else if (msg.senderId !== user.id) {
         notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+        toast.success(`${msg.senderName || 'User'}: ${msg.content || `[${msg.messageType}]`}`);
       }
       setChats(prev => {
         const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: selectedChatRef.current?.id === msg.chatId ? 0 : c.unreadCount + 1 } : c);
