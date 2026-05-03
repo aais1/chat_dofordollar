@@ -66,27 +66,6 @@ export const initSocket = (io) => {
             io.to(socket.id).emit('message-delivered', { messageId: id });
           }
         }
-        // Also fetch unread messages (isRead = false) that arrived while admin was offline
-        const unread = await db.select({
-          id: messages.id,
-          chatId: messages.chatId,
-          senderId: messages.senderId,
-          receiverId: messages.receiverId,
-          content: messages.content,
-          messageType: messages.messageType,
-          mediaUrl: messages.mediaUrl,
-          isDelivered: messages.isDelivered,
-          isRead: messages.isRead,
-          createdAt: messages.createdAt,
-          senderName: users.name,
-        }).from(messages).leftJoin(users, eq(messages.senderId, users.id)).where(and(eq(messages.receiverId, user.id), eq(messages.isRead, false)));
-
-        if (unread.length > 0) {
-          // Emit each unread message to the admin socket so the admin UI can show them immediately
-          for (const m of unread) {
-            io.to(socket.id).emit('receive-message', m);
-          }
-        }
       } catch (e) {
         console.error('[Socket] admin deliver-mark failed:', e);
       }
@@ -260,6 +239,8 @@ export const initSocket = (io) => {
         await db.update(users).set({ lastSeen }).where(eq(users.id, user.id));
         io.emit('user-offline', { userId: user.id, lastSeen });
       }
+      // Remove from adminSockets if present
+      if (adminSockets.has(socket.id)) adminSockets.delete(socket.id);
       console.log(`[Socket] Disconnected: ${user.name}`);
     });
   });
