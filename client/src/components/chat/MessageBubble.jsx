@@ -6,7 +6,7 @@ import { Check, CheckCheck, MoreVertical, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api.js';
 
-export default function MessageBubble({ msg, enableObserver = true }) {
+export default function MessageBubble({ msg, enableObserver = true, root = null }) {
   const { user } = useAuth();
   const { emit } = useSocket();
   const [showOptions, setShowOptions] = useState(false);
@@ -17,6 +17,7 @@ export default function MessageBubble({ msg, enableObserver = true }) {
 
   useEffect(() => {
     if (msg.isRead || msg.senderId === user.id || !enableObserver) return;
+    
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -24,10 +25,18 @@ export default function MessageBubble({ msg, enableObserver = true }) {
           observer.unobserve(entry.target);
         }
       });
-    }, { threshold: 0.5 });
-    if (ref.current) observer.observe(ref.current);
+    }, { 
+      threshold: 0.5,
+      root: root?.current || null,
+      rootMargin: '0px'
+    });
+    
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+    
     return () => observer.disconnect();
-  }, [msg.id, msg.isRead, msg.senderId, user.id, emit, enableObserver]);
+  }, [msg.id, msg.isRead, msg.senderId, user.id, emit, enableObserver, root]);
 
   const handleDelete = () => {
     // Proceed immediately without a blocking browser confirm dialog

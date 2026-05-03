@@ -86,18 +86,9 @@ export const initSocket = (io) => {
 
         const receiverId = user.role === 'admin' ? chat.userId : chat.adminId;
 
-        // Decide delivery/unread behavior based on whether receiver is connected and in the chat room
+        // Decide delivery behavior
         const receiverSocketId = onlineUsers.get(receiverId);
-        let delivered = false;
-        let incrementUnread = true;
-        if (receiverSocketId) {
-          delivered = true; // receiver has a socket connection
-          const recvSock = io.sockets.sockets.get(receiverSocketId);
-          if (recvSock && recvSock.rooms && recvSock.rooms.has(`chat:${chatId}`)) {
-            // Receiver is currently in the chat room -> they will see the message; don't increment unread
-            incrementUnread = false;
-          }
-        }
+        let delivered = !!receiverSocketId;
 
         const [msg] = await db.insert(messages).values({
           chatId,
@@ -109,8 +100,12 @@ export const initSocket = (io) => {
           isDelivered: delivered,
         }).returning();
 
-        // Update chat last message and conditionally increment unread count
+        // Update chat last message. 
+        // Only increment unreadCount if the USER is sending a message to the ADMIN.
+        // Admin messages shouldn't show up as unread badges for the admin.
         const lastMsg = content || `[${messageType}]`;
+        const incrementUnread = user.role === 'user';
+        
         await db.update(chats).set({
           lastMessage:   lastMsg,
           lastMessageAt: new Date(),
@@ -120,7 +115,6 @@ export const initSocket = (io) => {
 
         // Emit to room (for clients who have joined)
         io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: user.name });
-        console.log(`[Socket] Emitted message ${msg.id} to room chat:${chatId}`);
 
         // If receiver has a socket, decide whether to send directly or rely on room delivery
         if (receiverSocketId) {
@@ -131,7 +125,6 @@ export const initSocket = (io) => {
             if (!inRoom) {
               // Receiver not in the room: send directly so they get the message live
               io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: user.name });
-              console.log(`[Socket] Emitted message ${msg.id} directly to receiver ${receiverId}`);
             }
 
             // Notify the sender socket that the message was delivered (so sender UI updates)
@@ -151,10 +144,8 @@ export const initSocket = (io) => {
 
         // Notify admin dashboards (all admin sockets) so admin sees live updates in chat list
         try {
-          console.log(`[Socket] Notifying ${adminSockets.size} admin sockets about message ${msg.id}`);
           for (const adminSocketId of adminSockets) {
             io.to(adminSocketId).emit('receive-message', { ...msg, senderName: user.name });
-            console.log(`[Socket] Emitted message ${msg.id} to admin socket ${adminSocketId}`);
           }
         } catch (e) { console.error('notify admins error:', e); }
 
@@ -187,9 +178,13 @@ export const initSocket = (io) => {
         }
         
         // Decrement unread count by the number of messages read
-        await db.update(chats).set({ 
-          unreadCount: sql`GREATEST(0, ${chats.unreadCount} - ${messageIds.length})` 
-        }).where(eq(chats.id, Number.parseInt(chatId)));
+        // ONLY if the admin is reading user messages. 
+        // (unreadCount tracks the admin's unread badge for this chat)
+        if (user.role === 'admin') {
+          await db.update(chats).set({ 
+            unreadCount: sql`GREATEST(0, ${chats.unreadCount} - ${messageIds.length})` 
+          }).where(eq(chats.id, Number.parseInt(chatId)));
+        }
         
         socket.to(`chat:${chatId}`).emit('message-read', { messageIds, chatId });
       } catch (err) {

@@ -376,33 +376,22 @@ export default function Admin() {
     if (selectedChatRef.current) emit('join-chat', { chatId: selectedChatRef.current.id });
 
     const offMsg = on('receive-message', (msg) => {
-      console.log('[Admin] Received message:', msg, 'selectedChat:', selectedChatRef.current?.id);
       try {
         if (selectedChatRef.current?.id === msg.chatId) {
           // Only add message if it's not from the current user (admin)
           // Admin messages are already added locally in handleSend callback
           if (msg.senderId !== user.id) {
-            console.log('[Admin] Adding user message to chat');
             setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) {
-                console.log('[Admin] Message already exists, skipping');
-                return prev;
-              }
+              if (prev.some(m => m.id === msg.id)) return prev;
               return [...prev, msg];
             });
-            emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
-          } else {
-            console.log('[Admin] Ignoring own message');
           }
-        } else {
-          console.log('[Admin] Message not for current chat');
-          if (msg.senderId !== user.id) {
-            notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
-          }
+        } else if (msg.senderId !== user.id) {
+          notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
         }
 
         setChats(prev => {
-          const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: selectedChatRef.current?.id === msg.chatId ? 0 : c.unreadCount + 1 } : c);
+          const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: c.unreadCount + 1 } : c);
           return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
         });
       } catch (e) { console.error('receive-message admin handler error:', e); }
@@ -483,10 +472,10 @@ export default function Admin() {
       skipRef.current = res.data.messages.length;
       if (res.data.messages.length < 50) setHasMore(false);
       
-      // Clear unread count in chat list on opening
+      // Clear unread count right away for the green dot
       setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
+      
       emit('join-chat', { chatId: chat.id });
-      console.log('[Admin] Joined chat room:', chat.id);
     } catch (err) { console.error(err); } finally { setMsgLoad(false); }
   };
 
@@ -836,7 +825,7 @@ export default function Admin() {
                      )}
                      {messages.map((msg, i) => {
                         const prevMsg = messages[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
-                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} enableObserver={observerEnabled}/></div>);
+                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} enableObserver={observerEnabled} root={chatContainerRef}/></div>);
                      })}
                      {typing && <TypingIndicator name="User"/>}
                      <div ref={bottomRef} className="h-4"/>
