@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -142,14 +141,14 @@ function LabelModal({ onClose, onCreated, chats }) {
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
-    if (!name.trim()) return toast.error('Label name required');
+    if (!name.trim()) return;
     setLoading(true);
     try {
       const { data } = await api.post('/labels', { name, chatIds: selectedChats });
       onCreated(data.label, selectedChats);
       onClose();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Failed to create label');
+      // Error creating label
     } finally {
       setLoading(false);
     }
@@ -369,11 +368,15 @@ export default function Admin() {
     const offMsg = on('receive-message', (msg) => {
       try {
         if (selectedChatRef.current?.id === msg.chatId) {
-          setMessages(prev => {
-            if (prev.some(m => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
-          if (msg.senderId !== user.id) emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+          // Only add message if it's not from the current user (admin)
+          // Admin messages are already added locally in handleSend callback
+          if (msg.senderId !== user.id) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+            emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+          }
         } else if (msg.senderId !== user.id) {
           notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
         }
@@ -439,13 +442,11 @@ export default function Admin() {
     const formData = new FormData();
     formData.append('image', file);
     try {
-      toast.loading('Uploading...', { id: 'upload' });
       const { data } = await api.patch(`/users/${user.id}/profile-picture`, formData);
       setUser(data.user);
       emit('update-profile', { profilePicture: data.user.profilePicture });
-      toast.success('Profile picture updated!', { id: 'upload' });
     } catch (err) {
-      toast.error('Failed to upload profile picture', { id: 'upload' });
+      // Failed to upload profile picture
     }
   };
 
@@ -495,7 +496,7 @@ export default function Admin() {
       if (res?.message) {
         setMessages(prev => prev.some(m => m.id === res.message.id) ? prev : [...prev, { ...res.message, senderId: user.id }]);
       } else if (res?.error) {
-        toast.error(res.error);
+        // Message send error
       }
     });
   }, [selectedChat, emit, user.id]);
@@ -522,9 +523,9 @@ export default function Admin() {
         setSelected(null);
         setMessages([]);
       }
-      toast.success('Chat history cleared');
+      // Chat history cleared
     } catch (err) {
-      toast.error('Failed to clear chat');
+      // Failed to clear chat
     }
   };
 
@@ -554,7 +555,7 @@ export default function Admin() {
         });
       });
     } catch (e) {
-      toast.error(`Failed to ${action} chat`);
+      // Failed to perform chat action
     }
   };
 

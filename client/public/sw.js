@@ -8,9 +8,12 @@ self.addEventListener('push', function(event) {
   const options = {
     body: data.body || '',
     data: data,
-    icon: '/vite.svg',
-    badge: '/vite.svg',
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
     vibrate: [100, 50, 100],
+    requireInteraction: true,
+    silent: false,
+    tag: data.chatId || 'chat-message'
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -18,10 +21,15 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  const url = event.notification.data?.url || '/';
-  event.waitUntil(clients.matchAll({ type: 'window' }).then(windowClients => {
+  const data = event.notification.data || {};
+  const url = data.chatId ? `/?chat=${data.chatId}` : '/';
+
+  event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
     for (let client of windowClients) {
-      if (client.url === url && 'focus' in client) return client.focus();
+      if (client.url.includes('chatapp.dofordollars.com') && 'focus' in client) {
+        client.postMessage({ type: 'OPEN_CHAT', chatId: data.chatId, messageId: data.messageId });
+        return client.focus();
+      }
     }
     if (clients.openWindow) return clients.openWindow(url);
   }));
