@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext.jsx';
+import { setupPushNotifications } from '../utils/push.js';
 
 const SocketContext = createContext(null);
 
@@ -37,6 +38,8 @@ export const SocketProvider = ({ children }) => {
     socket.on('connect', () => {
       setIsConnected(true);
       console.log('[Socket] Connected:', socket.id, 'URL:', socketUrl);
+      // Register push subscription once the socket (and therefore auth) is confirmed
+      setupPushNotifications().catch(e => console.warn('[Push] setup error:', e));
     });
 
     socket.on('disconnect', (reason) => {

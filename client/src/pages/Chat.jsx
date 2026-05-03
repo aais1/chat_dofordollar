@@ -95,14 +95,26 @@ export default function Chat() {
         skipRef.current = loadedMsgs.length;
         if (loadedMsgs.length < 50) setHasMore(false);
 
-        // Seed the unread badge from DB state (messages from admin not yet read)
-        // Only count if the user is NOT currently viewing the chat messages area
+        // Messages from admin that haven't been read yet
+        const unreadIds = loadedMsgs
+          .filter(m => !m.isRead && m.senderId !== chatRes.data.chat.userId)
+          .map(m => m.id);
+
         const chatAreaAlreadyVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
-        if (!chatAreaAlreadyVisible) {
-          const unread = loadedMsgs.filter(
-            m => !m.isRead && m.senderId !== chatRes.data.chat.userId // senderId is admin
-          ).length;
-          setUnreadFromAdmin(unread);
+
+        if (unreadIds.length > 0) {
+          if (chatAreaAlreadyVisible) {
+            // Chat is open and visible — mark everything as read in DB immediately.
+            // This is the most important path: ensures DB stays consistent.
+            emit('message-read', { chatId: chatRes.data.chat.id, messageIds: unreadIds });
+            setMessages(prev => prev.map(m =>
+              unreadIds.includes(m.id) ? { ...m, isRead: true } : m
+            ));
+          } else {
+            // Sidebar or another tab is showing — set the badge count so user
+            // sees how many unread messages they have before opening the chat.
+            setUnreadFromAdmin(unreadIds.length);
+          }
         }
 
         isInitialLoad.current = true; // Reset for initial scroll
@@ -115,6 +127,7 @@ export default function Chat() {
     };
     init();
   }, [user.id, emit]);
+
 
   useEffect(() => {
     if (messages.length > 0 && chat) {

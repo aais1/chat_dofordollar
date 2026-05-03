@@ -483,14 +483,29 @@ export default function Admin() {
     isInitialLoad.current = true;
     try {
       const res = await api.get(`/chats/${chat.id}/messages`, { params: { limit: 50, skip: 0 } });
-      setMessages(res.data.messages);
-      skipRef.current = res.data.messages.length;
-      if (res.data.messages.length < 50) setHasMore(false);
-      
-      // Clear unread count right away for the green dot
+      const msgs = res.data.messages;
+      setMessages(msgs);
+      skipRef.current = msgs.length;
+      if (msgs.length < 50) setHasMore(false);
+
+      // Optimistically clear unread badge in the list
       setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
-      
+
       emit('join-chat', { chatId: chat.id });
+
+      // Immediately mark all unread received messages as read in DB.
+      // This guarantees the DB stays in sync even if IntersectionObserver
+      // doesn't fire (e.g. user opens and closes chat quickly).
+      const unreadIds = msgs
+        .filter(m => !m.isRead && m.senderId !== user.id)
+        .map(m => m.id);
+      if (unreadIds.length > 0) {
+        emit('message-read', { chatId: chat.id, messageIds: unreadIds });
+        // Update local message state optimistically
+        setMessages(prev => prev.map(m =>
+          unreadIds.includes(m.id) ? { ...m, isRead: true } : m
+        ));
+      }
     } catch (err) { console.error(err); } finally { setMsgLoad(false); }
   };
 
