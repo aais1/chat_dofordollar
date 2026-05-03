@@ -394,8 +394,8 @@ export default function Admin() {
 
     const offMsg = on('receive-message', (msg) => {
       try {
-        const isCurrentChat = selectedChatRef.current?.id === msg.chatId;
-        const fromOtherUser = msg.senderId !== user.id;
+        const isCurrentChat = Number(selectedChatRef.current?.id) === Number(msg.chatId);
+        const fromOtherUser = Number(msg.senderId) !== Number(user.id);
 
         // Add to message list only when this chat is open and the message is from the other party
         if (isCurrentChat && fromOtherUser) {
@@ -411,7 +411,7 @@ export default function Admin() {
         // Only bump unreadCount when this chat is NOT currently open
         setChats(prev => {
           const updated = prev.map(c => {
-            if (c.id !== msg.chatId) return c;
+            if (Number(c.id) !== Number(msg.chatId)) return c;
             return {
               ...c,
               lastMessage: msg.content || `[${msg.messageType}]`,
@@ -434,11 +434,12 @@ export default function Admin() {
 
     const offRead = on('message-read', ({ messageIds, chatId }) => {
       try {
-        if (selectedChatRef.current?.id === chatId) {
+        const targetChatId = Number(chatId);
+        if (Number(selectedChatRef.current?.id) === targetChatId) {
           setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
         }
         // Decrement unread count for the chat
-        setChats(prev => prev.map(c => c.id === chatId ? { ...c, unreadCount: Math.max(0, c.unreadCount - messageIds.length) } : c));
+        setChats(prev => prev.map(c => Number(c.id) === targetChatId ? { ...c, unreadCount: Math.max(0, c.unreadCount - messageIds.length) } : c));
       } catch (e) { console.error('message-read admin handler error:', e); }
     });
 

@@ -179,8 +179,8 @@ export default function Chat() {
 
     const offMsg = on('receive-message', (msg) => {
       try {
-        if (activeChatRef.current?.id === msg.chatId) {
-          const fromOtherUser = msg.senderId !== user.id;
+        if (Number(activeChatRef.current?.id) === Number(msg.chatId)) {
+          const fromOtherUser = Number(msg.senderId) !== Number(user.id);
           const chatAreaVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
 
           setMessages(prev => {
@@ -210,7 +210,8 @@ export default function Chat() {
     });
 
     const offRead = on('message-read', ({ messageIds, chatId }) => {
-      if (activeChatRef.current?.id === chatId) {
+      const targetChatId = Number(chatId);
+      if (Number(activeChatRef.current?.id) === targetChatId) {
         setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
         // Decrement badge for messages we just confirmed read
         setUnreadFromAdmin(prev => Math.max(0, prev - messageIds.length));

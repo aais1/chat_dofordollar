@@ -227,12 +227,11 @@ export const initSocket = (io) => {
           await db
             .update(chats)
             .set({ unreadCount: sql`GREATEST(0, ${chats.unreadCount} - ${confirmedIds.length})` })
-            .where(eq(chats.id, Number.parseInt(chatId)));
+            .where(eq(chats.id, Number(chatId)));
         }
 
         // Broadcast read receipt to everyone in the room so the SENDER's ticks turn blue
-        // Use io.to (not socket.to) so the sender also receives it if they're in the room
-        io.to(`chat:${chatId}`).emit('message-read', { messageIds: confirmedIds, chatId });
+        io.to(`chat:${chatId}`).emit('message-read', { messageIds: confirmedIds, chatId: Number(chatId) });
       } catch (err) {
         console.error('[Socket] message-read error:', err);
       }
