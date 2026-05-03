@@ -8,36 +8,48 @@ import api from '../../utils/api.js';
 
 export default function MessageBubble({ msg }) {
   const { user } = useAuth();
-  const { emit } = useSocket();
+  const { emit, isConnected } = useSocket();
   const [showOptions, setShowOptions] = useState(false);
+  const [dbgAction, setDbgAction] = useState(null);
   const isMine = msg.senderId === user.id;
   const isAdmin = user.role === 'admin';
 
   const handleDelete = () => {
-    if (confirm('Delete this message for everyone?')) {
-      emit('delete-message', { messageId: msg.id, chatId: msg.chatId }, async (res) => {
+    // Proceed immediately without a blocking browser confirm dialog
+    const toastId = toast.loading('Deleting...');
+
+    emit('delete-message', { messageId: msg.id, chatId: msg.chatId }, async (res) => {
+      try {
         if (res?.success) {
-          toast.success('Message deleted');
+          toast.success('Message deleted', { id: toastId });
+          setDbgAction('deleted via socket');
         } else if (res?.error) {
-          toast.error(res.error + ' — trying HTTP fallback');
+          toast.error(res.error + ' — trying HTTP fallback', { id: toastId });
+          setDbgAction('socket error, falling back');
           // Fallback to REST API
           try {
             await api.delete(`/chats/messages/${msg.id}`);
-            toast.success('Message deleted (via HTTP)');
+            toast.success('Message deleted (via HTTP)', { id: toastId });
+            setDbgAction('deleted via HTTP');
           } catch (err) {
-            toast.error('Failed to delete message');
+            toast.error('Failed to delete message', { id: toastId });
           }
         } else {
           // No ack received, try HTTP fallback
+          setDbgAction('no ack, falling back');
           try {
             await api.delete(`/chats/messages/${msg.id}`);
-            toast.success('Message deleted (via HTTP)');
+            toast.success('Message deleted (via HTTP)', { id: toastId });
+            setDbgAction('deleted via HTTP');
           } catch (err) {
-            toast.error('Failed to delete message');
+            toast.error('Failed to delete message', { id: toastId });
           }
         }
-      });
-    }
+      } catch (err) {
+        toast.error('Failed to delete message', { id: toastId });
+      }
+    });
+
     setShowOptions(false);
   };
 
@@ -88,11 +100,12 @@ export default function MessageBubble({ msg }) {
             >
               <MoreVertical size={16} />
             </button>
+
             {showOptions && (
-              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-[#233138] shadow-xl rounded-lg py-1 z-20 border border-gray-100 dark:border-gray-800 min-w-[120px]">
+              <div className="absolute right-0 z-[999999]  top-full mt-1 bg-white dark:bg-[#233138] shadow-xl rounded-lg py-1 z-20 border border-gray-100 dark:border-gray-800 min-w-[120px]">
                 <button 
-                  onClick={(e) => { e.stopPropagation(); console.log('[Client] delete-message emit', { messageId: msg.id, chatId: msg.chatId }); handleDelete(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors font-medium"
+                  onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                  className="w-full flex relative z-[999999] items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors font-medium"
                 >
                   <Trash2 size={12} /> Delete
                 </button>
@@ -101,6 +114,7 @@ export default function MessageBubble({ msg }) {
           </div>
         )}
 
+        {/* mobile trash and DBG removed per request */}
         <MediaContent />
         
         {msg.content && (
@@ -117,12 +131,12 @@ export default function MessageBubble({ msg }) {
         </div>
       </div>
       
-      {showOptions && (
+      {/* {showOptions && (
         <div 
           className="fixed inset-0 z-[15]" 
           onClick={() => setShowOptions(false)} 
         />
-      )}
+      )} */}
     </div>
   );
 }
