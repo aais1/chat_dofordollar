@@ -40,6 +40,8 @@ export default function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [viewerStatus, setViewerStatus] = useState(null);
+  // Local unread badge: messages sent by admin that user hasn't seen yet
+  const [unreadFromAdmin, setUnreadFromAdmin] = useState(0);
 
   const fileInputRef = useRef();
 
@@ -51,10 +53,23 @@ export default function Chat() {
   const skipRef     = useRef(0);
   const isInitialLoad = useRef(true);
   const lastMsgId = useRef(null);
+  // Refs to read current tab/sidebar state inside socket callbacks without stale closures
+  const activeTabRef = useRef('chats');
+  const sidebarOpenRef = useRef(false);
 
   useEffect(() => {
     activeChatRef.current = chat;
   }, [chat]);
+
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+  useEffect(() => { sidebarOpenRef.current = sidebarOpen; }, [sidebarOpen]);
+
+  // When the chat messages area becomes visible, clear the local unread badge.
+  // The IntersectionObserver in MessageBubble handles the actual read-receipt emission.
+  useEffect(() => {
+    const chatAreaVisible = activeTab === 'chats' && !sidebarOpen;
+    if (chatAreaVisible) setUnreadFromAdmin(0);
+  }, [activeTab, sidebarOpen]);
 
   // (no observerEnabled gate — IntersectionObserver in MessageBubble handles timing via the root ref)
 
@@ -75,9 +90,20 @@ export default function Chat() {
         setSidebarOpen(false); // Focused on chat by default
 
         const msgsRes = await api.get(`/chats/${chatRes.data.chat.id}/messages`, { params: { limit: 50, skip: 0 } });
-        setMessages(msgsRes.data.messages);
-        skipRef.current = msgsRes.data.messages.length;
-        if (msgsRes.data.messages.length < 50) setHasMore(false);
+        const loadedMsgs = msgsRes.data.messages;
+        setMessages(loadedMsgs);
+        skipRef.current = loadedMsgs.length;
+        if (loadedMsgs.length < 50) setHasMore(false);
+
+        // Seed the unread badge from DB state (messages from admin not yet read)
+        // Only count if the user is NOT currently viewing the chat messages area
+        const chatAreaAlreadyVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
+        if (!chatAreaAlreadyVisible) {
+          const unread = loadedMsgs.filter(
+            m => !m.isRead && m.senderId !== chatRes.data.chat.userId // senderId is admin
+          ).length;
+          setUnreadFromAdmin(unread);
+        }
 
         isInitialLoad.current = true; // Reset for initial scroll
         emit('join-chat', { chatId: chatRes.data.chat.id });
@@ -121,8 +147,12 @@ export default function Chat() {
             if (prev.some(m => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
-          // Only mark as read if the message was sent by the other party
+          // Track unread badge if chat messages area is not visible
           if (msg.senderId !== user.id) {
+            const chatAreaVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
+            if (!chatAreaVisible) {
+              setUnreadFromAdmin(prev => prev + 1);
+            }
             if (Notification.permission === 'granted' && document.hidden) notify(`New Message`, msg.content || `[${msg.messageType}]`);
           }
         }
@@ -140,6 +170,8 @@ export default function Chat() {
     const offRead = on('message-read', ({ messageIds, chatId }) => {
       if (activeChatRef.current?.id === chatId) {
         setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
+        // Decrement badge for messages we just confirmed read
+        setUnreadFromAdmin(prev => Math.max(0, prev - messageIds.length));
       }
     });
 
@@ -263,8 +295,15 @@ export default function Chat() {
         </div>
         
         <button onClick={() => setActiveTab('chats')}
-          className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 transition ${activeTab === 'chats' ? 'bg-gray-200 dark:bg-gray-800 text-green-500' : 'text-gray-500 hover:text-green-400'}`}>
-          <MessageCircle size={24} />
+          className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 transition relative ${activeTab === 'chats' ? 'bg-gray-200 dark:bg-gray-800 text-green-500' : 'text-gray-500 hover:text-green-400'}`}>
+          <span className="relative inline-flex">
+            <MessageCircle size={24} />
+            {unreadFromAdmin > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center bg-green-500 text-white text-[9px] font-black rounded-full shadow-lg animate-pulse">
+                {unreadFromAdmin > 9 ? '9+' : unreadFromAdmin}
+              </span>
+            )}
+          </span>
           <span className="text-[10px] md:hidden font-bold">Chats</span>
         </button>
         
@@ -300,7 +339,7 @@ export default function Chat() {
                <h2 className="text-xl font-bold dark:text-white">Chats</h2>
             </div>
             <div className="flex-1 overflow-y-auto">
-               <button onClick={() => { setChat(initialChat); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 dark:hover:bg-[#202C33] transition ${chat ? 'bg-gray-50 dark:bg-[#2A3942]/30' : ''}`}>
+               <button onClick={() => { setChat(initialChat); setSidebarOpen(false); setUnreadFromAdmin(0); }} className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 dark:hover:bg-[#202C33] transition ${chat ? 'bg-gray-50 dark:bg-[#2A3942]/30' : ''}`}>
                   <div className="relative w-12 h-12 rounded-full overflow-hidden bg-green-600 flex-shrink-0">
                     {initialChat?.admin?.profilePicture ? (
                       <img src={initialChat.admin.profilePicture} className="w-full h-full object-cover" />
@@ -311,10 +350,23 @@ export default function Chat() {
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                      <div className="flex justify-between items-baseline">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{initialChat?.admin?.name || 'Admin'}</p>
-                        <span className="text-[10px] text-gray-400">{formatChatDate(chat?.lastMessageAt)}</span>
+                        <p className={`font-semibold truncate ${unreadFromAdmin > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-900 dark:text-gray-100'}`}>
+                          {initialChat?.admin?.name || 'Admin'}
+                        </p>
+                        <span className={`text-[10px] flex-shrink-0 ml-1 ${unreadFromAdmin > 0 ? 'text-green-500 font-bold' : 'text-gray-400'}`}>
+                          {formatChatDate(chat?.lastMessageAt)}
+                        </span>
                      </div>
-                     <p className="text-sm text-gray-500 truncate">{chat?.lastMessage || 'Start a conversation'}</p>
+                     <div className="flex items-center justify-between">
+                       <p className={`text-sm truncate ${unreadFromAdmin > 0 ? 'text-gray-700 dark:text-gray-200 font-semibold' : 'text-gray-500'}`}>
+                         {chat?.lastMessage || 'Start a conversation'}
+                       </p>
+                       {unreadFromAdmin > 0 && (
+                         <span className="ml-2 flex-shrink-0 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-[10px] font-black shadow">
+                           {unreadFromAdmin > 9 ? '9+' : unreadFromAdmin}
+                         </span>
+                       )}
+                     </div>
                   </div>
                </button>
             </div>

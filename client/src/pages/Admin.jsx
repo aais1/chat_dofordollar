@@ -368,38 +368,39 @@ export default function Admin() {
 
     const offMsg = on('receive-message', (msg) => {
       try {
-        // Only add message to list if we're viewing that chat and it's not from us
-        if (selectedChatRef.current?.id === msg.chatId) {
-          if (msg.senderId !== user.id) {
-            setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-          }
-          // Don't increment unreadCount in chat list — the chat is open, observer will mark as read
-        } else if (msg.senderId !== user.id) {
-          notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
-          // Only bump unreadCount when NOT viewing this chat
-          setChats(prev => {
-            const updated = prev.map(c =>
-              c.id === msg.chatId
-                ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: c.unreadCount + 1 }
-                : c
-            );
-            return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+        const isCurrentChat = selectedChatRef.current?.id === msg.chatId;
+        const fromOtherUser = msg.senderId !== user.id;
+
+        // Add to message list only when this chat is open and the message is from the other party
+        if (isCurrentChat && fromOtherUser) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
           });
-          return;
         }
 
-        // Update lastMessage preview in chat list regardless
+        // Always update the chat list preview (lastMessage + timestamp)
+        // Only bump unreadCount when this chat is NOT currently open
         setChats(prev => {
-          const updated = prev.map(c =>
-            c.id === msg.chatId
-              ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt }
-              : c
-          );
+          const updated = prev.map(c => {
+            if (c.id !== msg.chatId) return c;
+            return {
+              ...c,
+              lastMessage: msg.content || `[${msg.messageType}]`,
+              lastMessageAt: msg.createdAt,
+              // Bump unread badge only when admin isn't actively viewing this chat
+              unreadCount: (!isCurrentChat && fromOtherUser)
+                ? c.unreadCount + 1
+                : c.unreadCount,
+            };
+          });
           return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
         });
+
+        // Push notification when it's a message from user for a different chat
+        if (!isCurrentChat && fromOtherUser) {
+          notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+        }
       } catch (e) { console.error('receive-message admin handler error:', e); }
     });
 
