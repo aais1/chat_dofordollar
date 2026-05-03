@@ -3,6 +3,8 @@ import { formatMessageTime } from '../../utils/time.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSocket } from '../../context/SocketContext.jsx';
 import { Check, CheckCheck, MoreVertical, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import api from '../../utils/api.js';
 
 export default function MessageBubble({ msg }) {
   const { user } = useAuth();
@@ -13,7 +15,28 @@ export default function MessageBubble({ msg }) {
 
   const handleDelete = () => {
     if (confirm('Delete this message for everyone?')) {
-      emit('delete-message', { messageId: msg.id, chatId: msg.chatId });
+      emit('delete-message', { messageId: msg.id, chatId: msg.chatId }, async (res) => {
+        if (res?.success) {
+          toast.success('Message deleted');
+        } else if (res?.error) {
+          toast.error(res.error + ' — trying HTTP fallback');
+          // Fallback to REST API
+          try {
+            await api.delete(`/chats/messages/${msg.id}`);
+            toast.success('Message deleted (via HTTP)');
+          } catch (err) {
+            toast.error('Failed to delete message');
+          }
+        } else {
+          // No ack received, try HTTP fallback
+          try {
+            await api.delete(`/chats/messages/${msg.id}`);
+            toast.success('Message deleted (via HTTP)');
+          } catch (err) {
+            toast.error('Failed to delete message');
+          }
+        }
+      });
     }
     setShowOptions(false);
   };
@@ -71,7 +94,7 @@ export default function MessageBubble({ msg }) {
                   onClick={(e) => { e.stopPropagation(); console.log('[Client] delete-message emit', { messageId: msg.id, chatId: msg.chatId }); handleDelete(); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors font-medium"
                 >
-                  <Trash2 size={12} /> Delete Message
+                  <Trash2 size={12} /> Delete
                 </button>
               </div>
             )}

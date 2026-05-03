@@ -1,6 +1,7 @@
 import { db } from '../config/db.js';
 import { chats, messages, users, labels, chatLabels } from '../models/schema.js';
 import { eq, desc, asc, lt, and, sql, inArray } from 'drizzle-orm';
+import { getIO } from '../sockets/broadcast.js';
 
 // GET /api/chats/my-chat  (user)
 export const getMyChat = async (req, res) => {
@@ -262,6 +263,18 @@ export const deleteMessage = async (req, res) => {
       : { lastMessage: null, lastMessageAt: null };
 
     await db.update(chats).set(updates).where(eq(chats.id, msg.chatId));
+    // Broadcast deletion to socket room (if socket server available)
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`chat:${msg.chatId}`).emit('message-deleted', {
+          messageId: parseInt(messageId),
+          chatId: msg.chatId,
+          lastMessage: updates.lastMessage,
+          lastMessageAt: updates.lastMessageAt,
+        });
+      }
+    } catch (err) { console.error('broadcast delete-message error:', err); }
 
     res.json({ success: true, message: 'Message deleted' });
   } catch (err) {

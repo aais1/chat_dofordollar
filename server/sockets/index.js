@@ -2,11 +2,14 @@ import { socketAuth } from '../middleware/auth.js';
 import { db } from '../config/db.js';
 import { messages, chats, users } from '../models/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
+import { setIO } from './broadcast.js';
 
 // Map userId -> socketId for online tracking
 const onlineUsers = new Map();
 
 export const initSocket = (io) => {
+  // expose io for REST controllers to broadcast events
+  setIO(io);
   io.use(socketAuth);
 
   io.on('connection', async (socket) => {
@@ -127,12 +130,18 @@ export const initSocket = (io) => {
     });
 
     // --- delete-message ---
-    socket.on('delete-message', async ({ messageId, chatId }) => {
+    socket.on('delete-message', async ({ messageId, chatId }, ack) => {
       try {
-        if (user.role !== 'admin') return;
+        if (user.role !== 'admin') {
+          ack?.({ error: 'Admin permission required' });
+          return;
+        }
 
         const [msg] = await db.select().from(messages).where(eq(messages.id, messageId));
-        if (!msg) return;
+        if (!msg) {
+          ack?.({ error: 'Message not found' });
+          return;
+        }
 
         await db.delete(messages).where(eq(messages.id, messageId));
 
@@ -156,8 +165,11 @@ export const initSocket = (io) => {
           lastMessage: updates.lastMessage, 
           lastMessageAt: updates.lastMessageAt 
         });
+
+        ack?.({ success: true });
       } catch (err) {
         console.error('[Socket] delete-message error:', err);
+        ack?.({ error: 'Server error' });
       }
     });
 
