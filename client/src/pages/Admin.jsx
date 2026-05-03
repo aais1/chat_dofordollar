@@ -335,6 +335,10 @@ export default function Admin() {
   }, [selectedChat]);
 
   useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
+
+  useEffect(() => {
     if (Notification.permission === 'default') Notification.requestPermission();
     const init = async () => {
       try {
@@ -372,19 +376,29 @@ export default function Admin() {
     if (selectedChatRef.current) emit('join-chat', { chatId: selectedChatRef.current.id });
 
     const offMsg = on('receive-message', (msg) => {
+      console.log('[Admin] Received message:', msg, 'selectedChat:', selectedChatRef.current?.id);
       try {
         if (selectedChatRef.current?.id === msg.chatId) {
           // Only add message if it's not from the current user (admin)
           // Admin messages are already added locally in handleSend callback
           if (msg.senderId !== user.id) {
+            console.log('[Admin] Adding user message to chat');
             setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev;
+              if (prev.some(m => m.id === msg.id)) {
+                console.log('[Admin] Message already exists, skipping');
+                return prev;
+              }
               return [...prev, msg];
             });
             emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+          } else {
+            console.log('[Admin] Ignoring own message');
           }
-        } else if (msg.senderId !== user.id) {
-          notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+        } else {
+          console.log('[Admin] Message not for current chat');
+          if (msg.senderId !== user.id) {
+            notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+          }
         }
 
         setChats(prev => {
@@ -472,6 +486,7 @@ export default function Admin() {
       // Clear unread count in chat list on opening
       setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
       emit('join-chat', { chatId: chat.id });
+      console.log('[Admin] Joined chat room:', chat.id);
     } catch (err) { console.error(err); } finally { setMsgLoad(false); }
   };
 

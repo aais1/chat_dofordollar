@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext.jsx';
 
@@ -22,8 +22,9 @@ export const SocketProvider = ({ children }) => {
 
     const token = localStorage.getItem('token');
     // Connect to the base URL (Vite proxy handles /socket.io)
-    // We use the full origin specifically to avoid confusion during port changes
-    const socket = io("https://api.chatyapp.online", {
+    // Use relative URL for development, absolute for production
+    const socketUrl = import.meta.env.DEV ? '/' : 'https://api.chatyapp.online';
+    const socket = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -35,7 +36,7 @@ export const SocketProvider = ({ children }) => {
 
     socket.on('connect', () => {
       setIsConnected(true);
-      console.log('[Socket] Connected:', socket.id);
+      console.log('[Socket] Connected:', socket.id, 'URL:', socketUrl);
     });
 
     socket.on('disconnect', (reason) => {
@@ -93,8 +94,17 @@ export const SocketProvider = ({ children }) => {
     socketRef.current?.off(event, handler);
   }, []);
 
+  const value = useMemo(() => ({
+    socket: socketRef.current,
+    isConnected,
+    onlineUsers,
+    emit,
+    on,
+    off
+  }), [isConnected, onlineUsers, emit, on, off]);
+
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, isConnected, onlineUsers, emit, on, off }}>
+    <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
   );
