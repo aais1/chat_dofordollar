@@ -14,7 +14,8 @@ import TypingIndicator from '../components/chat/TypingIndicator.jsx';
 import { StatusCircle, StatusViewer, SegmentedCircle } from '../components/status/StatusViewer.jsx';
 import {
   LogOut, Sun, Moon, MessageSquare,
-  MessageCircle, CircleDashed, Settings, ChevronLeft, X
+  MessageCircle, CircleDashed, Settings, ChevronLeft, X,
+  Bell, BellOff, Info, Plus, Send, Paperclip
 } from 'lucide-react';
 
 const notify = (title, body) => {

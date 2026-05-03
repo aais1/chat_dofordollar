@@ -14,9 +14,10 @@ import TypingIndicator from '../components/chat/TypingIndicator.jsx';
 import { StatusViewer, SegmentedCircle } from '../components/status/StatusViewer.jsx';
 import {
   LogOut, Sun, Moon, Search, Shield, X,
-  Ban, BellOff, Trash2, Plus, Upload, Settings,
+  Ban, Bell, BellOff, Trash2, Plus, Upload, Settings,
   Image as ImageIcon, Film, Type, ChevronLeft, MoreVertical,
-  MessageCircle, CircleDashed, Filter, Tag, Pin, Archive, ArchiveRestore
+  MessageCircle, CircleDashed, Filter, Tag, Pin, Archive, ArchiveRestore,
+  Info, Send, Paperclip
 } from 'lucide-react';
 
 const notify = (title, body, icon) => {
