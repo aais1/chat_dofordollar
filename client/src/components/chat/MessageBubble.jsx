@@ -20,8 +20,11 @@ export default function MessageBubble({ msg }) {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
-          emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
-          observer.unobserve(entry.target);
+          // Delay to prevent automatic marking on initial load
+          setTimeout(() => {
+            emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+            observer.unobserve(entry.target);
+          }, 1000);
         }
       });
     }, { threshold: 0.5 });

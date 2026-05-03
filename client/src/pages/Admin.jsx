@@ -461,6 +461,8 @@ export default function Admin() {
       skipRef.current = res.data.messages.length;
       if (res.data.messages.length < 50) setHasMore(false);
       
+      // Clear unread count in chat list on opening
+      setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
       emit('join-chat', { chatId: chat.id });
     } catch (err) { console.error(err); } finally { setMsgLoad(false); }
   };
