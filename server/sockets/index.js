@@ -7,6 +7,8 @@ import { sendPushToUser } from '../controllers/push.controller.js';
 
 // Map userId -> socketId for online tracking
 const onlineUsers = new Map();
+// Track admin socket ids so we can notify admin dashboards even if they are not in specific chat rooms
+const adminSockets = new Set();
 
 export const initSocket = (io) => {
   // expose io for REST controllers to broadcast events
@@ -47,13 +49,11 @@ export const initSocket = (io) => {
       // Notify admin user is online
       io.emit('user-online', { userId: user.id });
     } else {
-      // Admin joins all active chat rooms
-      const allChats = await db.select().from(chats);
-      console.log(`[Socket] Admin ${user.name} joining ${allChats.length} rooms`);
-      for (const c of allChats) {
-        socket.join(`chat:${c.id}`);
-      }
+      // Admin connects: do NOT auto-join all chat rooms. Admin will join rooms on demand
+      // (when they open a chat). We still notify presence and will push unread messages below.
+      console.log(`[Socket] Admin ${user.name} connected`);
       io.emit('admin-online');
+      adminSockets.add(socket.id);
 
       // On admin connect, mark any previously undelivered messages (to this admin) as delivered
       try {
@@ -158,6 +158,13 @@ export const initSocket = (io) => {
           }
         }
 
+        // Notify admin dashboards (all admin sockets) so admin sees live updates in chat list
+        try {
+          for (const adminSocketId of adminSockets) {
+            io.to(adminSocketId).emit('receive-message', { ...msg, senderName: user.name });
+          }
+        } catch (e) { console.error('notify admins error:', e); }
+
         ack?.({ success: true, message: msg });
       } catch (err) {
         console.error('[Socket] send-message error:', err);
@@ -261,3 +268,4 @@ export const initSocket = (io) => {
 };
 
 export { onlineUsers };
+export { adminSockets };

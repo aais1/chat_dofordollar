@@ -3,6 +3,7 @@ import { chats, messages, users, labels, chatLabels } from '../models/schema.js'
 import { eq, desc, asc, lt, and, sql, inArray } from 'drizzle-orm';
 import { getIO } from '../sockets/broadcast.js';
 import { onlineUsers } from '../sockets/index.js';
+import { adminSockets } from '../sockets/index.js';
 import { sendPushToUser } from './push.controller.js';
 
 // GET /api/chats/my-chat  (user)
@@ -183,6 +184,11 @@ export const sendMessage = async (req, res) => {
             io.to(receiverSocketId).emit('message-delivered', { messageId: msg.id });
           }
         } catch (e) { console.error('direct notify error:', e); }
+              try {
+                for (const adminSocketId of adminSockets) {
+                  io.to(adminSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
+                }
+              } catch (e) { console.error('notify admins error (rest):', e); }
       }
     } catch (err) { console.error('broadcast sendMessage error:', err); }
 
