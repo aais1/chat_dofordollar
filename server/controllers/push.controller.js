@@ -1,6 +1,6 @@
 import webpush from 'web-push';
 import { db } from '../config/db.js';
-import { pushSubscriptions } from '../models/pushSchema.js';
+import { pushSubscriptions } from '../models/schema.js';
 import { eq } from 'drizzle-orm';
 
 export const getVapidPublicKey = (req, res) => {

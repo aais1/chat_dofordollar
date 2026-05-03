@@ -7,6 +7,8 @@ import cors from 'cors';
 import { initSocket } from './sockets/index.js';
 import { startStatusCleanupJob } from './jobs/cleanupStatuses.js';
 import webpush from 'web-push';
+import { db } from './config/db.js';
+import { sql } from 'drizzle-orm';
 
 // VAPID keys for web push notifications
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:aaisali228@gmail.com';
@@ -83,6 +85,23 @@ startStatusCleanupJob();
 
 // Start server
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+  
+  // Auto-create push_subscriptions table if missing
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        subscription TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS push_sub_user_id_idx ON push_subscriptions (user_id);
+    `);
+    console.log('✅ Database: push_subscriptions table verified/created.');
+  } catch (err) {
+    console.error('❌ Database initialization error:', err);
+  }
 });

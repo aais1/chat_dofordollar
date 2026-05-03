@@ -114,3 +114,15 @@ export const chatLabels = pgTable('chat_labels', {
 }, (table) => ({
   chatLabelIdx: uniqueIndex('chat_labels_unique_idx').on(table.chatId, table.labelId),
 }));
+
+// Push Subscriptions table for PWA notifications
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id:           serial('id').primaryKey(),
+  userId:       integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  subscription: text('subscription').notNull(), // JSON string
+  createdAt:    timestamp('created_at').defaultNow().notNull(),
+  updatedAt:    timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: uniqueIndex('push_sub_user_id_idx').on(table.userId),
+}));
+

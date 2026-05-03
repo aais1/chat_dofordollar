@@ -6,6 +6,7 @@ import { useSocket } from '../context/SocketContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import api from '../utils/api.js';
 import { isSameDay, formatChatDate } from '../utils/time.js';
+import { getPushStatus, setupPushNotifications } from '../utils/push.js';
 import MessageBubble from '../components/chat/MessageBubble.jsx';
 import MessageInput from '../components/chat/MessageInput.jsx';
 import DateSeparator from '../components/chat/DateSeparator.jsx';
@@ -42,6 +43,8 @@ export default function Chat() {
   const [viewerStatus, setViewerStatus] = useState(null);
   // Local unread badge: messages sent by admin that user hasn't seen yet
   const [unreadFromAdmin, setUnreadFromAdmin] = useState(0);
+  const [pushStatus, setPushStatus] = useState({ supported: false, permission: 'default' });
+  const [pushLoading, setPushLoading] = useState(false);
 
   const fileInputRef = useRef();
 
@@ -75,8 +78,10 @@ export default function Chat() {
 
   useEffect(() => {
     if (Notification.permission === 'default') {
-      Notification.requestPermission();
+      // Don't auto-request on mobile as it will be blocked.
+      // Just check status for the settings UI.
     }
+    getPushStatus().then(setPushStatus);
 
     const init = async () => {
       try {
@@ -448,8 +453,53 @@ export default function Chat() {
                     </div>
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleProfilePicChange} />
                   </div>
+
+                  {/* Push Notifications Section */}
+                  <div className="bg-gray-50 dark:bg-[#202C33] p-6 rounded-3xl border border-[var(--border)] shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl ${pushStatus.permission === 'granted' ? 'bg-green-100 dark:bg-green-500/20 text-green-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+                           {pushStatus.permission === 'granted' ? <Bell size={20} /> : <BellOff size={20} />}
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900 dark:text-white">Push Notifications</p>
+                          <p className="text-xs text-gray-500">{pushStatus.permission === 'granted' ? 'Enabled' : 'Not setup yet'}</p>
+                        </div>
+                      </div>
+                      {pushStatus.permission !== 'granted' && (
+                        <button 
+                          disabled={pushLoading}
+                          onClick={async () => {
+                            setPushLoading(true);
+                            const res = await setupPushNotifications();
+                            if (res.success) {
+                              toast.success('Notifications enabled!');
+                              const status = await getPushStatus();
+                              setPushStatus(status);
+                            } else {
+                              toast.error(res.error || 'Failed to enable notifications');
+                            }
+                            setPushLoading(false);
+                          }}
+                          className="px-4 py-2 bg-green-500 text-white rounded-xl text-xs font-bold hover:bg-green-600 transition disabled:opacity-50"
+                        >
+                          {pushLoading ? 'Setting up...' : 'Enable'}
+                        </button>
+                      )}
+                    </div>
+                    {pushStatus.permission === 'denied' && (
+                      <p className="text-[10px] text-red-500 mt-2 bg-red-50 dark:bg-red-500/10 p-3 rounded-lg flex gap-2 items-start">
+                        <Info size={14} className="flex-shrink-0 mt-0.5" />
+                        <span>Permission was denied. Please reset notification permissions in your browser settings to enable.</span>
+                      </p>
+                    )}
+                    <p className="text-[10px] text-gray-500 mt-2 leading-relaxed italic">
+                      Push notifications allow you to receive messages even when the app is closed.
+                    </p>
+                  </div>
               </div>
            </div>
+
         )}
       </div>
 
