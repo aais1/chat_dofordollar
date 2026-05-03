@@ -309,7 +309,6 @@ export default function Admin() {
   const [aboutMsg, setAbout]         = useState(user?.about || '');
   const [isEditingAbout, setEditingAbout] = useState(false);
   const [tempAbout, setTempAbout] = useState('');
-  const [observerEnabled, setObserverEnabled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadMore] = useState(false);
@@ -324,15 +323,7 @@ export default function Admin() {
   const isInitialLoad = useRef(true);
   const lastChatId = useRef(null);
 
-  useEffect(() => {
-    if (selectedChat) {
-      // Enable observer after a short delay to prevent auto-marking on chat open
-      const timer = setTimeout(() => setObserverEnabled(true), 1000);
-      return () => clearTimeout(timer);
-    } else {
-      setObserverEnabled(false);
-    }
-  }, [selectedChat]);
+  // (no observerEnabled gate — IntersectionObserver in MessageBubble handles this via the root ref)
 
   useEffect(() => {
     selectedChatRef.current = selectedChat;
@@ -377,21 +368,36 @@ export default function Admin() {
 
     const offMsg = on('receive-message', (msg) => {
       try {
+        // Only add message to list if we're viewing that chat and it's not from us
         if (selectedChatRef.current?.id === msg.chatId) {
-          // Only add message if it's not from the current user (admin)
-          // Admin messages are already added locally in handleSend callback
           if (msg.senderId !== user.id) {
             setMessages(prev => {
               if (prev.some(m => m.id === msg.id)) return prev;
               return [...prev, msg];
             });
           }
+          // Don't increment unreadCount in chat list — the chat is open, observer will mark as read
         } else if (msg.senderId !== user.id) {
           notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+          // Only bump unreadCount when NOT viewing this chat
+          setChats(prev => {
+            const updated = prev.map(c =>
+              c.id === msg.chatId
+                ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: c.unreadCount + 1 }
+                : c
+            );
+            return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+          });
+          return;
         }
 
+        // Update lastMessage preview in chat list regardless
         setChats(prev => {
-          const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: c.unreadCount + 1 } : c);
+          const updated = prev.map(c =>
+            c.id === msg.chatId
+              ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt }
+              : c
+          );
           return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
         });
       } catch (e) { console.error('receive-message admin handler error:', e); }
@@ -424,7 +430,15 @@ export default function Admin() {
       setChats(prev => prev.map(c => c.id === chatId ? { ...c, lastMessage, lastMessageAt } : c));
     });
 
-    return () => { offMsg(); offRead(); offTyping(); offStopTyping(); offDelete(); };
+    // messages-delivered: receiver came online or message was delivered
+    const offDelivered = on('messages-delivered', ({ messageIds }) => {
+      if (!messageIds?.length) return;
+      if (selectedChatRef.current) {
+        setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isDelivered: true } : m));
+      }
+    });
+
+    return () => { offMsg(); offDelivered(); offRead(); offTyping(); offStopTyping(); offDelete(); };
   }, [on, emit, user.id, isConnected]);
 
   const updateWelcome = async () => {
@@ -814,7 +828,7 @@ export default function Admin() {
                   <div 
                       ref={chatContainerRef}
                       className="flex-1 overflow-y-auto px-4 py-5 flex flex-col custom-scrollbar"
-                      onScroll={e => { if (e.target.scrollTop > 0) setObserverEnabled(true); if (e.target.scrollTop < 100) loadMore(); }}
+                      onScroll={e => { if (e.target.scrollTop < 100) loadMore(); }}
                   >
                      <div className="flex-1" />
                      {loadingMore && (
@@ -825,7 +839,7 @@ export default function Admin() {
                      )}
                      {messages.map((msg, i) => {
                         const prevMsg = messages[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
-                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} enableObserver={observerEnabled} root={chatContainerRef}/></div>);
+                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} root={chatContainerRef}/></div>);
                      })}
                      {typing && <TypingIndicator name="User"/>}
                      <div ref={bottomRef} className="h-4"/>

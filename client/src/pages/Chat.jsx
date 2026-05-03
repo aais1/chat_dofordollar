@@ -36,7 +36,6 @@ export default function Chat() {
   const [loading, setLoading]   = useState(true);
   const [loadingMore, setLoadMore] = useState(false);
   const [hasMore, setHasMore]   = useState(true);
-  const [observerEnabled, setObserverEnabled] = useState(false);
   const [initialChat, setInitialChat] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -57,15 +56,7 @@ export default function Chat() {
     activeChatRef.current = chat;
   }, [chat]);
 
-  useEffect(() => {
-    if (chat) {
-      // Enable observer after a short delay to prevent auto-marking on chat open
-      const timer = setTimeout(() => setObserverEnabled(true), 1000);
-      return () => clearTimeout(timer);
-    } else {
-      setObserverEnabled(false);
-    }
-  }, [chat]);
+  // (no observerEnabled gate — IntersectionObserver in MessageBubble handles timing via the root ref)
 
   useEffect(() => {
     if (Notification.permission === 'default') {
@@ -140,8 +131,10 @@ export default function Chat() {
       }
     });
 
-    const offDelivered = on('message-delivered', ({ messageId }) => {
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDelivered: true } : m));
+    // messages-delivered: server sends array of ids when receiver connects/comes online
+    const offDelivered = on('messages-delivered', ({ messageIds }) => {
+      if (!messageIds?.length) return;
+      setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isDelivered: true } : m));
     });
 
     const offRead = on('message-read', ({ messageIds, chatId }) => {
@@ -436,7 +429,7 @@ export default function Chat() {
                   return (
                     <div key={msg.id}>
                       {showDate && <DateSeparator date={msg.createdAt} />}
-                      <MessageBubble msg={msg} enableObserver={observerEnabled} root={chatContainerRef} />
+                      <MessageBubble msg={msg} root={chatContainerRef} />
                     </div>
                   );
                 })}

@@ -19,51 +19,56 @@ export const initSocket = (io) => {
     const user = socket.user;
     console.log(`[Socket] Connected: ${user.name} (${user.id})`);
 
-    // Store online
     // Single session policy for admin: disconnect old session if exists
     if (user.role === 'admin') {
       const existingSocketId = onlineUsers.get(user.id);
       if (existingSocketId && existingSocketId !== socket.id) {
         console.log(`[Socket] Admin ${user.name} logged in elsewhere. Disconnecting old session: ${existingSocketId}`);
-        io.to(existingSocketId).emit('force-logout', { 
-          reason: 'You have been logged in from another device/browser.' 
+        io.to(existingSocketId).emit('force-logout', {
+          reason: 'You have been logged in from another device/browser.'
         });
-        // Give some time for the event to reach the client before disconnecting
         const oldSocket = io.sockets.sockets.get(existingSocketId);
-        if (oldSocket) {
-          oldSocket.disconnect(true);
-        }
+        if (oldSocket) oldSocket.disconnect(true);
       }
     }
 
     onlineUsers.set(user.id, socket.id);
 
-    // If user, join their chat room; if admin, join all user rooms
     if (user.role === 'user') {
+      // User: join their chat room
       const [chat] = await db.select().from(chats).where(eq(chats.userId, user.id));
       if (chat) {
         socket.join(`chat:${chat.id}`);
         socket.chatId = chat.id;
         console.log(`[Socket] User ${user.name} joined room chat:${chat.id}`);
       }
-      // Notify admin user is online
       io.emit('user-online', { userId: user.id });
     } else {
-      // Admin connects: do NOT auto-join all chat rooms. Admin will join rooms on demand
-      // (when they open a chat). We still notify presence and will push unread messages below.
+      // Admin: notify presence
       console.log(`[Socket] Admin ${user.name} connected`);
       io.emit('admin-online');
       adminSockets.add(socket.id);
 
-      // On admin connect, mark any previously undelivered messages (to this admin) as delivered
+      // Mark undelivered messages as delivered now that admin is online
       try {
-        const undelivered = await db.select().from(messages).where(and(eq(messages.receiverId, user.id), eq(messages.isDelivered, false)));
+        const undelivered = await db
+          .select()
+          .from(messages)
+          .where(and(eq(messages.receiverId, user.id), eq(messages.isDelivered, false)));
+
         if (undelivered.length > 0) {
           const ids = undelivered.map(m => m.id);
           await db.update(messages).set({ isDelivered: true }).where(inArray(messages.id, ids));
-          // Notify admin socket about delivered messages
-          for (const id of ids) {
-            io.to(socket.id).emit('message-delivered', { messageId: id });
+
+          // Notify the senders that their messages are now delivered (double gray tick)
+          // Group by chatId so we can find the right room to broadcast to
+          const grouped = {};
+          for (const m of undelivered) {
+            if (!grouped[m.chatId]) grouped[m.chatId] = [];
+            grouped[m.chatId].push(m.id);
+          }
+          for (const [chatId, msgIds] of Object.entries(grouped)) {
+            io.to(`chat:${chatId}`).emit('messages-delivered', { messageIds: msgIds, chatId: Number(chatId) });
           }
         }
       } catch (e) {
@@ -71,7 +76,9 @@ export const initSocket = (io) => {
       }
     }
 
-    // --- send-message ---
+    // -------------------------------------------------------------------
+    // send-message
+    // -------------------------------------------------------------------
     socket.on('send-message', async (data, ack) => {
       try {
         const { chatId, content, messageType = 'text', mediaUrl } = data;
@@ -86,9 +93,9 @@ export const initSocket = (io) => {
 
         const receiverId = user.role === 'admin' ? chat.userId : chat.adminId;
 
-        // Decide delivery behavior
+        // Delivered = receiver is currently connected (has a socket)
         const receiverSocketId = onlineUsers.get(receiverId);
-        let delivered = !!receiverSocketId;
+        const delivered = !!receiverSocketId;
 
         const [msg] = await db.insert(messages).values({
           chatId,
@@ -98,54 +105,65 @@ export const initSocket = (io) => {
           messageType,
           mediaUrl:    mediaUrl || null,
           isDelivered: delivered,
+          isRead:      false,   // NEVER set isRead on send — only IntersectionObserver sets it
         }).returning();
 
-        // Update chat last message. 
-        // Only increment unreadCount if the USER is sending a message to the ADMIN.
-        // Admin messages shouldn't show up as unread badges for the admin.
-        const lastMsg = content || `[${messageType}]`;
+        // Update chat last message
+        // Only increment unreadCount if USER is sending to ADMIN (admin sees unread badge)
+        const lastMsgText = content || `[${messageType}]`;
         const incrementUnread = user.role === 'user';
-        
+
         await db.update(chats).set({
-          lastMessage:   lastMsg,
+          lastMessage:   lastMsgText,
           lastMessageAt: new Date(),
           isActive:      true,
-          unreadCount:   incrementUnread ? sql`${chats.unreadCount} + 1` : chats.unreadCount,
+          unreadCount:   incrementUnread
+            ? sql`${chats.unreadCount} + 1`
+            : chats.unreadCount,
         }).where(eq(chats.id, chatId));
 
-        // Emit to room (for clients who have joined)
+        // Emit the new message to everyone in the room
         io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: user.name });
 
-        // If receiver has a socket, decide whether to send directly or rely on room delivery
+        // If receiver has a socket but is NOT in the room, send directly
         if (receiverSocketId) {
           try {
             const recvSock = io.sockets.sockets.get(receiverSocketId);
             const inRoom = recvSock?.rooms?.has(`chat:${chatId}`);
-
             if (!inRoom) {
-              // Receiver not in the room: send directly so they get the message live
               io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: user.name });
             }
 
-            // Notify the sender socket that the message was delivered (so sender UI updates)
-            io.to(socket.id).emit('message-delivered', { messageId: msg.id });
+            // Tell the SENDER their message was delivered (gray double tick)
+            io.to(socket.id).emit('messages-delivered', { messageIds: [msg.id], chatId });
 
-            // Mark delivered in DB if not already
+            // Persist delivery flag
             if (!delivered) {
               await db.update(messages).set({ isDelivered: true }).where(eq(messages.id, msg.id));
             }
 
-            // Best-effort: send web-push too
-            try { await sendPushToUser(receiverId, { title: `New message from ${user.name}`, body: content || `[${messageType}]`, chatId, messageId: msg.id }); } catch (e) { console.error('push send error (socket):', e); }
+            // Push notification (best-effort)
+            try {
+              await sendPushToUser(receiverId, {
+                title: `New message from ${user.name}`,
+                body: content || `[${messageType}]`,
+                chatId,
+                messageId: msg.id,
+              });
+            } catch (e) { console.error('push send error (socket):', e); }
           } catch (e) {
             console.error('[Socket] failed to notify receiver directly:', e);
           }
         }
 
-        // Notify admin dashboards (all admin sockets) so admin sees live updates in chat list
+        // Notify all admin sockets so the chat list updates in real time
         try {
           for (const adminSocketId of adminSockets) {
-            io.to(adminSocketId).emit('receive-message', { ...msg, senderName: user.name });
+            // Avoid double-emit if admin is in the room already
+            const adminSock = io.sockets.sockets.get(adminSocketId);
+            if (!adminSock?.rooms?.has(`chat:${chatId}`)) {
+              io.to(adminSocketId).emit('receive-message', { ...msg, senderName: user.name });
+            }
           }
         } catch (e) { console.error('notify admins error:', e); }
 
@@ -156,43 +174,66 @@ export const initSocket = (io) => {
       }
     });
 
-    // --- typing ---
+    // -------------------------------------------------------------------
+    // typing indicators
+    // -------------------------------------------------------------------
     socket.on('typing', ({ chatId }) => {
       socket.to(`chat:${chatId}`).emit('user-typing', { userId: user.id, userName: user.name });
     });
 
-    // --- stop-typing ---
     socket.on('stop-typing', ({ chatId }) => {
       socket.to(`chat:${chatId}`).emit('user-stop-typing', { userId: user.id });
     });
 
-    // --- message-read ---
+    // -------------------------------------------------------------------
+    // message-read
+    // Fired by the RECEIVER when messages scroll into their viewport.
+    // Updates DB and notifies the SENDER so their ticks turn blue.
+    // -------------------------------------------------------------------
     socket.on('message-read', async ({ chatId, messageIds }) => {
       try {
         if (!messageIds?.length) return;
-        
-        // Mark messages as read
-        for (const msgId of messageIds) {
-          await db.update(messages).set({ isRead: true, readAt: new Date() })
-            .where(eq(messages.id, msgId));
-        }
-        
-        // Decrement unread count by the number of messages read
-        // ONLY if the admin is reading user messages. 
-        // (unreadCount tracks the admin's unread badge for this chat)
+
+        // Only mark messages that were sent TO this user (never self-mark)
+        const toMark = await db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(
+            and(
+              inArray(messages.id, messageIds),
+              eq(messages.receiverId, user.id),
+              eq(messages.isRead, false)
+            )
+          );
+
+        if (toMark.length === 0) return;
+
+        const confirmedIds = toMark.map(m => m.id);
+
+        await db
+          .update(messages)
+          .set({ isRead: true, readAt: new Date() })
+          .where(inArray(messages.id, confirmedIds));
+
+        // Decrement unread count (only meaningful when admin reads user messages)
         if (user.role === 'admin') {
-          await db.update(chats).set({ 
-            unreadCount: sql`GREATEST(0, ${chats.unreadCount} - ${messageIds.length})` 
-          }).where(eq(chats.id, Number.parseInt(chatId)));
+          await db
+            .update(chats)
+            .set({ unreadCount: sql`GREATEST(0, ${chats.unreadCount} - ${confirmedIds.length})` })
+            .where(eq(chats.id, Number.parseInt(chatId)));
         }
-        
-        socket.to(`chat:${chatId}`).emit('message-read', { messageIds, chatId });
+
+        // Broadcast read receipt to everyone in the room so the SENDER's ticks turn blue
+        // Use io.to (not socket.to) so the sender also receives it if they're in the room
+        io.to(`chat:${chatId}`).emit('message-read', { messageIds: confirmedIds, chatId });
       } catch (err) {
         console.error('[Socket] message-read error:', err);
       }
     });
 
-    // --- delete-message ---
+    // -------------------------------------------------------------------
+    // delete-message
+    // -------------------------------------------------------------------
     socket.on('delete-message', async ({ messageId, chatId }, ack) => {
       try {
         if (user.role !== 'admin') {
@@ -208,25 +249,24 @@ export const initSocket = (io) => {
 
         await db.delete(messages).where(eq(messages.id, messageId));
 
-        // Update chat's last message info
-        const [lastMsg] = await db.select()
+        const [lastMsg] = await db
+          .select()
           .from(messages)
           .where(eq(messages.chatId, chatId))
           .orderBy(desc(messages.createdAt))
           .limit(1);
 
-        const updates = lastMsg 
+        const updates = lastMsg
           ? { lastMessage: lastMsg.content || `[${lastMsg.messageType}]`, lastMessageAt: lastMsg.createdAt }
           : { lastMessage: null, lastMessageAt: null };
 
         await db.update(chats).set(updates).where(eq(chats.id, chatId));
 
-        // Notify all in room
-        io.to(`chat:${chatId}`).emit('message-deleted', { 
-          messageId, 
-          chatId, 
-          lastMessage: updates.lastMessage, 
-          lastMessageAt: updates.lastMessageAt 
+        io.to(`chat:${chatId}`).emit('message-deleted', {
+          messageId,
+          chatId,
+          lastMessage: updates.lastMessage,
+          lastMessageAt: updates.lastMessageAt,
         });
 
         ack?.({ success: true });
@@ -236,18 +276,24 @@ export const initSocket = (io) => {
       }
     });
 
-    // --- join-chat (for admin dynamically joining a new user chat room) ---
+    // -------------------------------------------------------------------
+    // join-chat (admin joins a specific user room on demand)
+    // -------------------------------------------------------------------
     socket.on('join-chat', ({ chatId }) => {
-      console.log(`[Socket] Socket ${socket.id} (User: ${user.name}) explicitly joining room chat:${chatId}`);
+      console.log(`[Socket] ${user.name} joining room chat:${chatId}`);
       socket.join(`chat:${chatId}`);
     });
 
-    // --- profile-update ---
+    // -------------------------------------------------------------------
+    // profile-update
+    // -------------------------------------------------------------------
     socket.on('update-profile', (data) => {
       io.emit('profile-updated', { userId: user.id, updates: data });
     });
 
-    // --- disconnect ---
+    // -------------------------------------------------------------------
+    // disconnect
+    // -------------------------------------------------------------------
     socket.on('disconnect', async () => {
       if (onlineUsers.get(user.id) === socket.id) {
         onlineUsers.delete(user.id);
@@ -255,7 +301,6 @@ export const initSocket = (io) => {
         await db.update(users).set({ lastSeen }).where(eq(users.id, user.id));
         io.emit('user-offline', { userId: user.id, lastSeen });
       }
-      // Remove from adminSockets if present
       if (adminSockets.has(socket.id)) adminSockets.delete(socket.id);
       console.log(`[Socket] Disconnected: ${user.name}`);
     });
