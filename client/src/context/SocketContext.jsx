@@ -23,7 +23,7 @@ export const SocketProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     // Connect to the base URL (Vite proxy handles /socket.io)
     // We use the full origin specifically to avoid confusion during port changes
-    const socket = io(window.location.origin, {
+    const socket = io("https://api.chatyapp.online", {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
