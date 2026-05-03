@@ -352,6 +352,25 @@ export default function Admin() {
     init();
   }, []);
 
+  // When the admin views a specific chat (sidebar closed or desktop view),
+  // mark all loaded messages as read.
+  useEffect(() => {
+    const chatAreaVisible = activeTab === 'chats' && (!sidebarOpen || window.innerWidth >= 768);
+    if (chatAreaVisible && selectedChat && messages.length > 0) {
+      const unreadIds = messages
+        .filter(m => !m.isRead && m.senderId !== user.id)
+        .map(m => m.id);
+
+      if (unreadIds.length > 0) {
+        emit('message-read', { chatId: selectedChat.id, messageIds: unreadIds });
+        setMessages(prev => prev.map(m => 
+          unreadIds.includes(m.id) ? { ...m, isRead: true } : m
+        ));
+        setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, unreadCount: 0 } : c));
+      }
+    }
+  }, [activeTab, sidebarOpen, selectedChat?.id, messages.length, emit, user.id]);
+
   useEffect(() => {
     if (messages.length > 0 && selectedChat) {
       const latestMsg = messages[messages.length - 1];
@@ -382,8 +401,10 @@ export default function Admin() {
         if (isCurrentChat && fromOtherUser) {
           setMessages(prev => {
             if (prev.some(m => m.id === msg.id)) return prev;
-            return [...prev, msg];
+            return [...prev, { ...msg, isRead: true }];
           });
+          // Immediately mark as read in DB since we are looking at it
+          emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
         }
 
         // Always update the chat list preview (lastMessage + timestamp)

@@ -70,10 +70,28 @@ export default function Chat() {
 
   // When the chat messages area becomes visible, clear the local unread badge.
   // The IntersectionObserver in MessageBubble handles the actual read-receipt emission.
+  // When the chat messages area becomes visible, clear the local unread badge
+  // AND mark all currently loaded unread messages as read in the DB.
   useEffect(() => {
     const chatAreaVisible = activeTab === 'chats' && !sidebarOpen;
-    if (chatAreaVisible) setUnreadFromAdmin(0);
-  }, [activeTab, sidebarOpen]);
+    if (chatAreaVisible) {
+      setUnreadFromAdmin(0);
+      
+      // Mark all unread received messages as read in DB immediately.
+      if (messages.length > 0 && chat) {
+        const unreadIds = messages
+          .filter(m => !m.isRead && m.senderId !== chat.userId) // senderId is admin
+          .map(m => m.id);
+        
+        if (unreadIds.length > 0) {
+          emit('message-read', { chatId: chat.id, messageIds: unreadIds });
+          setMessages(prev => prev.map(m => 
+            unreadIds.includes(m.id) ? { ...m, isRead: true } : m
+          ));
+        }
+      }
+    }
+  }, [activeTab, sidebarOpen, messages.length, chat?.id, emit]);
 
   // (no observerEnabled gate — IntersectionObserver in MessageBubble handles timing via the root ref)
 
@@ -162,14 +180,19 @@ export default function Chat() {
     const offMsg = on('receive-message', (msg) => {
       try {
         if (activeChatRef.current?.id === msg.chatId) {
+          const fromOtherUser = msg.senderId !== user.id;
+          const chatAreaVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
+
           setMessages(prev => {
             if (prev.some(m => m.id === msg.id)) return prev;
-            return [...prev, msg];
+            return [...prev, { ...msg, isRead: (fromOtherUser && chatAreaVisible) }];
           });
-          // Track unread badge if chat messages area is not visible
-          if (msg.senderId !== user.id) {
-            const chatAreaVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
-            if (!chatAreaVisible) {
+
+          if (fromOtherUser) {
+            if (chatAreaVisible) {
+              // Mark as read immediately since we are looking at it
+              emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+            } else {
               setUnreadFromAdmin(prev => prev + 1);
             }
             if (Notification.permission === 'granted' && document.hidden) notify(`New Message`, msg.content || `[${msg.messageType}]`);
