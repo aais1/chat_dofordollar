@@ -1,7 +1,7 @@
 import { socketAuth } from '../middleware/auth.js';
 import { db } from '../config/db.js';
 import { messages, chats, users } from '../models/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 
 // Map userId -> socketId for online tracking
 const onlineUsers = new Map();
@@ -107,6 +107,41 @@ export const initSocket = (io) => {
         socket.to(`chat:${chatId}`).emit('message-read', { messageIds, chatId });
       } catch (err) {
         console.error('[Socket] message-read error:', err);
+      }
+    });
+
+    // --- delete-message ---
+    socket.on('delete-message', async ({ messageId, chatId }) => {
+      try {
+        if (user.role !== 'admin') return;
+
+        const [msg] = await db.select().from(messages).where(eq(messages.id, messageId));
+        if (!msg) return;
+
+        await db.delete(messages).where(eq(messages.id, messageId));
+
+        // Update chat's last message info
+        const [lastMsg] = await db.select()
+          .from(messages)
+          .where(eq(messages.chatId, chatId))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
+
+        const updates = lastMsg 
+          ? { lastMessage: lastMsg.content || `[${lastMsg.messageType}]`, lastMessageAt: lastMsg.createdAt }
+          : { lastMessage: null, lastMessageAt: null };
+
+        await db.update(chats).set(updates).where(eq(chats.id, chatId));
+
+        // Notify all in room
+        io.to(`chat:${chatId}`).emit('message-deleted', { 
+          messageId, 
+          chatId, 
+          lastMessage: updates.lastMessage, 
+          lastMessageAt: updates.lastMessageAt 
+        });
+      } catch (err) {
+        console.error('[Socket] delete-message error:', err);
       }
     });
 

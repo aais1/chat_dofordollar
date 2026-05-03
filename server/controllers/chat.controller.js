@@ -240,3 +240,32 @@ export const toggleArchive = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// DELETE /api/chats/messages/:messageId (admin)
+export const deleteMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const [msg] = await db.select().from(messages).where(eq(messages.id, parseInt(messageId)));
+    if (!msg) return res.status(404).json({ message: 'Message not found' });
+
+    await db.delete(messages).where(eq(messages.id, parseInt(messageId)));
+
+    // Update chat's last message info
+    const [lastMsg] = await db.select()
+      .from(messages)
+      .where(eq(messages.chatId, msg.chatId))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+
+    const updates = lastMsg 
+      ? { lastMessage: lastMsg.content || `[${lastMsg.messageType}]`, lastMessageAt: lastMsg.createdAt }
+      : { lastMessage: null, lastMessageAt: null };
+
+    await db.update(chats).set(updates).where(eq(chats.id, msg.chatId));
+
+    res.json({ success: true, message: 'Message deleted' });
+  } catch (err) {
+    console.error('deleteMessage error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

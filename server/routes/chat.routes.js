@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { protect, adminOnly } from '../middleware/auth.js';
 import {
   getMyChat, getAllChats, getMessages, sendMessage, markAsRead, deleteChat,
-  togglePin, toggleArchive
+  togglePin, toggleArchive, deleteMessage
 } from '../controllers/chat.controller.js';
 
 const router = Router();
@@ -17,5 +17,6 @@ router.patch('/:chatId/read', markAsRead);
 router.patch('/:chatId/pin', adminOnly, togglePin);
 router.patch('/:chatId/archive', adminOnly, toggleArchive);
 router.delete('/:chatId', adminOnly, deleteChat);
+router.delete('/messages/:messageId', adminOnly, deleteMessage);
 
 export default router;

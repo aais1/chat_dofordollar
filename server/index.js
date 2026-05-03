@@ -24,7 +24,8 @@ const httpServer = createServer(app);
 
 // CORS
 const allowedOrigins = [
-  'https://chatapp.dofordollars.com',
+  'https://chatyapp.online',
+  'https://www.chatyapp.online',
   'http://localhost:5173',
 ];
 
