@@ -590,26 +590,37 @@ export default function Admin() {
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search chats..." className="w-full bg-gray-100 dark:bg-[#202C33] text-sm py-2 pl-10 pr-4 rounded-xl dark:text-white focus:outline-none"/>
                  </div>
               </div>
-              <div className="px-4 mb-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                 <button onClick={() => setShowLabelModal(true)} className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#202C33] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#2A3942] transition">
-                    <Plus size={12}/> Add New
+          <div className="px-4 mb-3 flex items-center gap-2">
+            {/* Fixed pills: Archived, Unread, Add New (not part of the scroll area) */}
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <button onClick={() => setShowArchived(!showArchived)}
+                className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${showArchived ? 'opacity-100 bg-blue-100 text-blue-600 border-blue-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
+                <Archive size={10}/> {showArchived ? 'Hide Archived' : 'Archived'}
+              </button>
+
+              <button onClick={() => setOnlyUnread(!onlyUnread)}
+                className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${onlyUnread ? 'opacity-100 bg-green-100 text-green-600 border-green-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
+                <BellOff size={10}/> {onlyUnread ? 'Showing Unread' : 'Unread'}
+              </button>
+
+              <button onClick={() => setShowLabelModal(true)} className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#202C33] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#2A3942] transition">
+                <Plus size={12}/> Add New
+              </button>
+            </div>
+
+            {/* Scrollable labels only */}
+            <div className="flex-1 overflow-x-auto no-scrollbar pb-1">
+              <div className="flex gap-2">
+               {allLabels.map(l => (
+                 <button key={l.id} onClick={() => setActiveLabel(prev => prev === l.id ? null : l.id)}
+                   className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${activeLabel === l.id ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
+                   style={{ backgroundColor: `${l.color}22`, color: l.color, borderColor: activeLabel === l.id ? l.color : 'transparent' }}>
+                   <Tag size={10}/> {l.name}
                  </button>
-                 {allLabels.map(l => (
-                    <button key={l.id} onClick={() => setActiveLabel(prev => prev === l.id ? null : l.id)}
-                       className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${activeLabel === l.id ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
-                       style={{ backgroundColor: `${l.color}22`, color: l.color, borderColor: activeLabel === l.id ? l.color : 'transparent' }}>
-                       <Tag size={10}/> {l.name}
-                    </button>
-                 ))}
-                 <button onClick={() => setOnlyUnread(!onlyUnread)}
-                    className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${onlyUnread ? 'opacity-100 bg-green-100 text-green-600 border-green-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
-                    <BellOff size={10}/> {onlyUnread ? 'Showing Unread' : 'Unread'}
-                 </button>
-                 <button onClick={() => setShowArchived(!showArchived)}
-                    className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full transition border ${showArchived ? 'opacity-100 bg-blue-100 text-blue-600 border-blue-500' : 'opacity-60 hover:opacity-100 bg-gray-100 text-gray-600 border-transparent'}`}>
-                    <Archive size={10}/> {showArchived ? 'Hide Archived' : 'Archived'}
-                 </button>
-              </div>
+               ))}
+             </div>
+            </div>
+          </div>
                <div className="flex-1 overflow-y-auto">
                   {loading ? (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
