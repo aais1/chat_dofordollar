@@ -366,20 +366,32 @@ export default function Admin() {
     if (selectedChatRef.current) emit('join-chat', { chatId: selectedChatRef.current.id });
 
     const offMsg = on('receive-message', (msg) => {
-      if (selectedChatRef.current?.id === msg.chatId) {
-        setMessages(prev => [...prev, msg]);
-        emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
-      } else if (msg.senderId !== user.id) {
-        notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
-      }
-      setChats(prev => {
-        const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: selectedChatRef.current?.id === msg.chatId ? 0 : c.unreadCount + 1 } : c);
-        return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
-      });
+      try {
+        if (selectedChatRef.current?.id === msg.chatId) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+          if (msg.senderId !== user.id) emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+        } else if (msg.senderId !== user.id) {
+          notify(`Message from ${msg.senderName || 'User'}`, msg.content || `[${msg.messageType}]`, '/vite.svg');
+        }
+
+        setChats(prev => {
+          const updated = prev.map(c => c.id === msg.chatId ? { ...c, lastMessage: msg.content || `[${msg.messageType}]`, lastMessageAt: msg.createdAt, unreadCount: selectedChatRef.current?.id === msg.chatId ? 0 : c.unreadCount + 1 } : c);
+          return [...updated].sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+        });
+      } catch (e) { console.error('receive-message admin handler error:', e); }
     });
 
     const offRead = on('message-read', ({ messageIds, chatId }) => {
-      if (selectedChatRef.current?.id === chatId) setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
+      try {
+        if (selectedChatRef.current?.id === chatId) {
+          setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, isRead: true } : m));
+        }
+        // Clear unread count for the chat in the list when read arrives
+        setChats(prev => prev.map(c => c.id === chatId ? { ...c, unreadCount: 0 } : c));
+      } catch (e) { console.error('message-read admin handler error:', e); }
     });
 
     const offTyping = on('user-typing', ({ userId }) => {

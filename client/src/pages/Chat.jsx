@@ -116,12 +116,20 @@ export default function Chat() {
     }
 
     const offMsg = on('receive-message', (msg) => {
-      if (activeChatRef.current?.id === msg.chatId) {
-        setMessages(prev => [...prev, msg]);
-        emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
-        if (msg.senderId !== user.id) {
-          notify(`New Message`, msg.content || `[${msg.messageType}]`);
+      try {
+        if (activeChatRef.current?.id === msg.chatId) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+          // Only mark as read if the message was sent by the other party
+          if (msg.senderId !== user.id) {
+            emit('message-read', { chatId: msg.chatId, messageIds: [msg.id] });
+            if (Notification.permission === 'granted' && document.hidden) notify(`New Message`, msg.content || `[${msg.messageType}]`);
+          }
         }
+      } catch (e) {
+        console.error('receive-message handler error:', e);
       }
     });
 

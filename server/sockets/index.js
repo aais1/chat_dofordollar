@@ -121,15 +121,25 @@ export const initSocket = (io) => {
         // Emit to room (for clients who have joined)
         io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: user.name });
 
-        // If receiver has a socket and is not in the room, notify them directly
+        // If receiver has a socket, decide whether to send directly or rely on room delivery
         if (receiverSocketId) {
           try {
-            io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: user.name });
-            io.to(receiverSocketId).emit('message-delivered', { messageId: msg.id });
-            // Mark delivered in DB (if not already)
+            const recvSock = io.sockets.sockets.get(receiverSocketId);
+            const inRoom = recvSock && recvSock.rooms && recvSock.rooms.has(`chat:${chatId}`);
+
+            if (!inRoom) {
+              // Receiver not in the room: send directly so they get the message live
+              io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: user.name });
+            }
+
+            // Notify the sender socket that the message was delivered (so sender UI updates)
+            io.to(socket.id).emit('message-delivered', { messageId: msg.id });
+
+            // Mark delivered in DB if not already
             if (!delivered) {
               await db.update(messages).set({ isDelivered: true }).where(eq(messages.id, msg.id));
             }
+
             // Best-effort: send web-push too
             try { await sendPushToUser(receiverId, { title: `New message from ${user.name}`, body: content || `[${messageType}]`, chatId, messageId: msg.id }); } catch (e) { console.error('push send error (socket):', e); }
           } catch (e) {

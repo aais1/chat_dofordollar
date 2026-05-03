@@ -176,19 +176,24 @@ export const sendMessage = async (req, res) => {
       const io = getIO();
       if (io) {
         io.to(`chat:${chatId}`).emit('receive-message', { ...msg, senderName: req.user.name });
-        // If receiver is online on a different socket, send directly to them as well
+        // If receiver is online on a different socket, send directly to them as well (only if not in room)
         try {
           const receiverSocketId = onlineUsers.get(receiverId);
           if (receiverSocketId) {
-            io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
-            io.to(receiverSocketId).emit('message-delivered', { messageId: msg.id });
+            const recvSock = io.sockets.sockets.get(receiverSocketId);
+            const inRoom = recvSock && recvSock.rooms && recvSock.rooms.has(`chat:${chatId}`);
+            if (!inRoom) io.to(receiverSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
+            // Tell the sender socket the message was delivered
+            // Note: sender may be HTTP client so we also emit to all sockets of the sender id if present
+            const senderSocketId = onlineUsers.get(req.user.id);
+            if (senderSocketId) io.to(senderSocketId).emit('message-delivered', { messageId: msg.id });
           }
         } catch (e) { console.error('direct notify error:', e); }
-              try {
-                for (const adminSocketId of adminSockets) {
-                  io.to(adminSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
-                }
-              } catch (e) { console.error('notify admins error (rest):', e); }
+        try {
+          for (const adminSocketId of adminSockets) {
+            io.to(adminSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
+          }
+        } catch (e) { console.error('notify admins error (rest):', e); }
       }
     } catch (err) { console.error('broadcast sendMessage error:', err); }
 
