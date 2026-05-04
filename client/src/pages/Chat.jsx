@@ -209,6 +209,13 @@ export default function Chat() {
             return [...prev, { ...msg, isRead: (fromOtherUser && chatAreaVisible) }];
           });
 
+          // Update chat preview (last message)
+          setChat(prev => prev ? ({
+            ...prev,
+            lastMessage: msg.content || `[${msg.messageType}]`,
+            lastMessageAt: msg.createdAt
+          }) : prev);
+
           if (fromOtherUser) {
             if (chatAreaVisible) {
               // Mark as read immediately since we are looking at it
@@ -271,6 +278,12 @@ export default function Chat() {
           const exists = prev.some(m => m.id === res.message.id);
           return exists ? prev : [...prev, { ...res.message, senderId: user.id }];
         });
+        // Update chat preview
+        setChat(prev => prev ? ({
+          ...prev,
+          lastMessage: res.message.content || `[${res.message.messageType}]`,
+          lastMessageAt: res.message.createdAt
+        }) : prev);
       } else if (res?.error) {
         toast.error(res.error, {
           icon: '🚫',
