@@ -336,21 +336,55 @@ export default function Admin() {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
 
+  const syncData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [chatRes, statusRes, welcomeRes, labelsRes] = await Promise.all([
+        api.get('/chats'), api.get('/statuses'), api.get('/welcome'), api.get('/labels')
+      ]);
+      setChats(chatRes.data.chats);
+      setStatuses(statusRes.data.statuses);
+      setWelcome(welcomeRes.data.message);
+      setAllLabels(labelsRes.data.labels);
+      
+      // If a chat is selected, refresh its messages too
+      if (selectedChatRef.current) {
+        const res = await api.get(`/chats/${selectedChatRef.current.id}/messages`, { params: { limit: 50, skip: 0 } });
+        setMessages(res.data.messages);
+        skipRef.current = res.data.messages.length;
+      }
+    } catch (err) {
+      console.error('[Sync] Error:', err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [user.id]);
+
   useEffect(() => {
     if (Notification.permission === 'default') Notification.requestPermission();
-    const init = async () => {
-      try {
-        const [chatRes, statusRes, welcomeRes, labelsRes] = await Promise.all([
-          api.get('/chats'), api.get('/statuses'), api.get('/welcome'), api.get('/labels')
-        ]);
-        setChats(chatRes.data.chats);
-        setStatuses(statusRes.data.statuses);
-        setWelcome(welcomeRes.data.message);
-        setAllLabels(labelsRes.data.labels);
-      } catch (err) { console.error(err); } finally { setLoading(false); }
+    syncData();
+
+    // Re-sync when tab becomes visible (e.g. returning from background)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Sync] Tab visible, refreshing data...');
+        syncData(true);
+      }
     };
-    init();
-  }, []);
+    window.addEventListener('visibilitychange', handleVisibility);
+    return () => window.removeEventListener('visibilitychange', handleVisibility);
+  }, [syncData]);
+
+  // Re-sync when socket reconnects
+  useEffect(() => {
+    if (isConnected) {
+      console.log('[Sync] Socket reconnected, refreshing data...');
+      syncData(true);
+      if (selectedChatRef.current) {
+        emit('join-chat', { chatId: selectedChatRef.current.id });
+      }
+    }
+  }, [isConnected, emit, syncData]);
 
   // When the admin views a specific chat (sidebar closed or desktop view),
   // mark all loaded messages as read.

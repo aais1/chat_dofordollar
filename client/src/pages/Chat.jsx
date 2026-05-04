@@ -102,7 +102,8 @@ export default function Chat() {
     }
     getPushStatus().then(setPushStatus);
 
-    const init = async () => {
+    const syncUserChat = useCallback(async (silent = false) => {
+      if (!silent) setLoading(true);
       try {
         const [chatRes, statusRes] = await Promise.all([
           api.get('/chats/my-chat'),
@@ -111,7 +112,6 @@ export default function Chat() {
         setChat(chatRes.data.chat);
         setInitialChat(chatRes.data.chat);
         setStatuses(statusRes.data.statuses);
-        setSidebarOpen(false); // Focused on chat by default
 
         const msgsRes = await api.get(`/chats/${chatRes.data.chat.id}/messages`, { params: { limit: 50, skip: 0 } });
         const loadedMsgs = msgsRes.data.messages;
@@ -121,36 +121,57 @@ export default function Chat() {
 
         // Messages from admin that haven't been read yet
         const unreadIds = loadedMsgs
-          .filter(m => !m.isRead && m.senderId !== chatRes.data.chat.userId)
+          .filter(m => !m.isRead && Number(m.senderId) !== Number(chatRes.data.chat.userId))
           .map(m => m.id);
 
         const chatAreaAlreadyVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
 
         if (unreadIds.length > 0) {
           if (chatAreaAlreadyVisible) {
-            // Chat is open and visible — mark everything as read in DB immediately.
-            // This is the most important path: ensures DB stays consistent.
             emit('message-read', { chatId: chatRes.data.chat.id, messageIds: unreadIds });
             setMessages(prev => prev.map(m =>
               unreadIds.includes(m.id) ? { ...m, isRead: true } : m
             ));
           } else {
-            // Sidebar or another tab is showing — set the badge count so user
-            // sees how many unread messages they have before opening the chat.
             setUnreadFromAdmin(unreadIds.length);
           }
         }
 
-        isInitialLoad.current = true; // Reset for initial scroll
+        isInitialLoad.current = true;
         emit('join-chat', { chatId: chatRes.data.chat.id });
       } catch (err) {
-        console.error(err);
+        console.error('[Sync User] Error:', err);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
-    };
-    init();
-  }, [user.id, emit]);
+    }, [emit]);
+
+    useEffect(() => {
+      if (Notification.permission === 'default') {
+        // Don't auto-request on mobile as it will be blocked.
+        // Just check status for the settings UI.
+      }
+      getPushStatus().then(setPushStatus);
+
+      syncUserChat();
+
+      const handleVisibility = () => {
+        if (document.visibilityState === 'visible') {
+          console.log('[Sync User] Tab visible, refreshing...');
+          syncUserChat(true);
+        }
+      };
+      window.addEventListener('visibilitychange', handleVisibility);
+      return () => window.removeEventListener('visibilitychange', handleVisibility);
+    }, [syncUserChat]);
+
+    // Re-sync when socket reconnects
+    useEffect(() => {
+      if (isConnected) {
+        console.log('[Sync User] Socket reconnected, refreshing...');
+        syncUserChat(true);
+      }
+    }, [isConnected, syncUserChat]);
 
 
   useEffect(() => {
