@@ -153,14 +153,14 @@ export const initSocket = (io) => {
 
         // Push notification (best-effort)
         if (shouldSendPush) {
-          try {
-            await sendPushToUser(receiverId, {
+          setImmediate(() => {
+            sendPushToUser(receiverId, {
               title: `New message from ${user.name}`,
               body: content || `[${messageType}]`,
               chatId,
               messageId: msg.id,
-            });
-          } catch (e) { console.error('push send error (socket):', e); }
+            }).catch(console.error);
+          });
         }
 
         // Notify all admin sockets so the chat list updates in real time

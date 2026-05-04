@@ -38,10 +38,23 @@ export const sendPushToUser = async (userId, payload) => {
     }
     const sub = JSON.parse(row.subscription);
     console.log(`[Push] Sending notification to userId: ${userId}...`);
-    await webpush.sendNotification(sub, JSON.stringify(payload));
-    console.log(`[Push] Notification sent successfully to userId: ${userId}`);
+    
+    const start = Date.now();
+    await webpush.sendNotification(sub, JSON.stringify(payload), {
+      TTL: 0,
+      urgency: 'high'
+    });
+    console.log(`[Push] Push latency: ${Date.now() - start}ms for userId: ${userId}`);
   } catch (err) {
     console.error(`[Push] Error sending to userId ${userId}:`, err);
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      try {
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+        console.log(`[Push] Removed stale subscription for userId: ${userId}`);
+      } catch (dbErr) {
+        console.error(`[Push] Failed to remove stale subscription for userId ${userId}:`, dbErr);
+      }
+    }
   }
 };
 

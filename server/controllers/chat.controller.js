@@ -34,6 +34,9 @@ export const getMyChat = async (req, res) => {
 // GET /api/chats  (admin)
 export const getAllChats = async (req, res) => {
   try {
+    const limit = parseInt(req.query.limit) || 20;
+    const skip  = parseInt(req.query.skip)  || 0;
+
     const allChats = await db
       .select({
         id: chats.id,
@@ -57,7 +60,9 @@ export const getAllChats = async (req, res) => {
       .from(chats)
       .leftJoin(users, eq(chats.userId, users.id))
       .where(eq(chats.isActive, true))
-      .orderBy(desc(chats.isPinned), desc(chats.lastMessageAt));
+      .orderBy(desc(chats.isPinned), desc(chats.lastMessageAt))
+      .limit(limit)
+      .offset(skip);
 
     // Fetch labels for these chats
     const chatIds = allChats.map(c => c.id);
@@ -194,6 +199,16 @@ export const sendMessage = async (req, res) => {
             io.to(adminSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
           }
         } catch (e) { console.error('notify admins error (rest):', e); }
+
+        // Send push notification (fire-and-forget)
+        setImmediate(() => {
+          sendPushToUser(receiverId, {
+            title: `New message from ${req.user.name}`,
+            body: content || `[${messageType}]`,
+            chatId,
+            messageId: msg.id,
+          }).catch(console.error);
+        });
       }
     } catch (err) { console.error('broadcast sendMessage error:', err); }
 

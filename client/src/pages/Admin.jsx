@@ -326,6 +326,9 @@ export default function Admin() {
   const lastMsgId = useRef(null);
   const isInitialLoad = useRef(true);
   const lastChatId = useRef(null);
+  const chatsSkipRef = useRef(0);
+  const [hasMoreChats, setHasMoreChats] = useState(true);
+  const [loadingMoreChats, setLoadMoreChats] = useState(false);
 
   useEffect(() => {
     getPushStatus().then(setPushStatus);
@@ -340,9 +343,12 @@ export default function Admin() {
     if (!silent) setLoading(true);
     try {
       const [chatRes, statusRes, welcomeRes, labelsRes] = await Promise.all([
-        api.get('/chats'), api.get('/statuses'), api.get('/welcome'), api.get('/labels')
+        api.get('/chats', { params: { limit: 20, skip: 0 } }), api.get('/statuses'), api.get('/welcome'), api.get('/labels')
       ]);
       setChats(chatRes.data.chats);
+      chatsSkipRef.current = chatRes.data.chats.length;
+      if (chatRes.data.chats.length < 20) setHasMoreChats(false);
+      else setHasMoreChats(true);
       setStatuses(statusRes.data.statuses);
       setWelcome(welcomeRes.data.message);
       setAllLabels(labelsRes.data.labels);
@@ -592,6 +598,32 @@ export default function Admin() {
     } catch (err) { console.error(err); } finally { setLoadMore(false); }
   };
 
+  const loadMoreChatsList = async () => {
+    if (loadingMoreChats || !hasMoreChats) return;
+    setLoadMoreChats(true);
+    try {
+      const res = await api.get('/chats', { params: { limit: 20, skip: chatsSkipRef.current } });
+      const newChats = res.data.chats;
+      if (newChats.length > 0) {
+        setChats(prev => {
+          const combined = [...prev, ...newChats];
+          const seen = new Set();
+          return combined.filter(c => {
+            if (seen.has(c.id)) return false;
+            seen.add(c.id);
+            return true;
+          });
+        });
+        chatsSkipRef.current += newChats.length;
+      }
+      if (newChats.length < 20) setHasMoreChats(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadMoreChats(false);
+    }
+  };
+
   const handleSend = useCallback(async (data) => {
     if (!selectedChat) return;
     emit('send-message', { chatId: selectedChat.id, ...data }, (res) => {
@@ -735,14 +767,32 @@ export default function Admin() {
              </div>
             </div>
           </div>
-               <div className="flex-1 overflow-y-auto">
+               <div 
+                  className="flex-1 overflow-y-auto"
+                  onScroll={(e) => {
+                    const { scrollTop, scrollHeight, clientHeight } = e.target;
+                    if (scrollHeight - scrollTop - clientHeight < 100) {
+                      loadMoreChatsList();
+                    }
+                  }}
+               >
                   {loading ? (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {[1,2,3,4,5,6].map(i => <ChatRowSkeleton key={i} />)}
                     </div>
-                  ) : filtered.map(chat => (
-                    <ChatRow key={chat.id} chat={chat} selected={selectedChat?.id === chat.id} onClick={(action) => handleChatAction(chat.id, action)} />
-                  ))}
+                  ) : (
+                    <>
+                      {filtered.map(chat => (
+                        <ChatRow key={chat.id} chat={chat} selected={selectedChat?.id === chat.id} onClick={(action) => handleChatAction(chat.id, action)} />
+                      ))}
+                      {loadingMoreChats && (
+                        <div className="py-4 flex justify-center items-center">
+                           <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                           <span className="ml-2 text-xs text-gray-500 font-medium">Loading more chats...</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                </div> 
            </>
          )}
