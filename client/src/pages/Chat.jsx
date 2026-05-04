@@ -95,83 +95,72 @@ export default function Chat() {
 
   // (no observerEnabled gate — IntersectionObserver in MessageBubble handles timing via the root ref)
 
-  useEffect(() => {
-    if (Notification.permission === 'default') {
-      // Don't auto-request on mobile as it will be blocked.
-      // Just check status for the settings UI.
+  const syncUserChat = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [chatRes, statusRes] = await Promise.all([
+        api.get('/chats/my-chat'),
+        api.get('/statuses'),
+      ]);
+      setChat(chatRes.data.chat);
+      setInitialChat(chatRes.data.chat);
+      setStatuses(statusRes.data.statuses);
+
+      const msgsRes = await api.get(`/chats/${chatRes.data.chat.id}/messages`, { params: { limit: 50, skip: 0 } });
+      const loadedMsgs = msgsRes.data.messages;
+      setMessages(loadedMsgs);
+      skipRef.current = loadedMsgs.length;
+      if (loadedMsgs.length < 50) setHasMore(false);
+
+      // Messages from admin that haven't been read yet
+      const unreadIds = loadedMsgs
+        .filter(m => !m.isRead && Number(m.senderId) !== Number(chatRes.data.chat.userId))
+        .map(m => m.id);
+
+      const chatAreaAlreadyVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
+
+      if (unreadIds.length > 0) {
+        if (chatAreaAlreadyVisible) {
+          emit('message-read', { chatId: chatRes.data.chat.id, messageIds: unreadIds });
+          setMessages(prev => prev.map(m =>
+            unreadIds.includes(m.id) ? { ...m, isRead: true } : m
+          ));
+        } else {
+          setUnreadFromAdmin(unreadIds.length);
+        }
+      }
+
+      isInitialLoad.current = true;
+      emit('join-chat', { chatId: chatRes.data.chat.id });
+    } catch (err) {
+      console.error('[Sync User] Error:', err);
+    } finally {
+      if (!silent) setLoading(false);
     }
+  }, [emit]);
+
+  useEffect(() => {
     getPushStatus().then(setPushStatus);
+    syncUserChat();
 
-    const syncUserChat = useCallback(async (silent = false) => {
-      if (!silent) setLoading(true);
-      try {
-        const [chatRes, statusRes] = await Promise.all([
-          api.get('/chats/my-chat'),
-          api.get('/statuses'),
-        ]);
-        setChat(chatRes.data.chat);
-        setInitialChat(chatRes.data.chat);
-        setStatuses(statusRes.data.statuses);
-
-        const msgsRes = await api.get(`/chats/${chatRes.data.chat.id}/messages`, { params: { limit: 50, skip: 0 } });
-        const loadedMsgs = msgsRes.data.messages;
-        setMessages(loadedMsgs);
-        skipRef.current = loadedMsgs.length;
-        if (loadedMsgs.length < 50) setHasMore(false);
-
-        // Messages from admin that haven't been read yet
-        const unreadIds = loadedMsgs
-          .filter(m => !m.isRead && Number(m.senderId) !== Number(chatRes.data.chat.userId))
-          .map(m => m.id);
-
-        const chatAreaAlreadyVisible = activeTabRef.current === 'chats' && !sidebarOpenRef.current;
-
-        if (unreadIds.length > 0) {
-          if (chatAreaAlreadyVisible) {
-            emit('message-read', { chatId: chatRes.data.chat.id, messageIds: unreadIds });
-            setMessages(prev => prev.map(m =>
-              unreadIds.includes(m.id) ? { ...m, isRead: true } : m
-            ));
-          } else {
-            setUnreadFromAdmin(unreadIds.length);
-          }
-        }
-
-        isInitialLoad.current = true;
-        emit('join-chat', { chatId: chatRes.data.chat.id });
-      } catch (err) {
-        console.error('[Sync User] Error:', err);
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    }, [emit]);
-
-    useEffect(() => {
-      if (Notification.permission === 'default') {
-        // Don't auto-request on mobile as it will be blocked.
-        // Just check status for the settings UI.
-      }
-      getPushStatus().then(setPushStatus);
-
-      syncUserChat();
-
-      const handleVisibility = () => {
-        if (document.visibilityState === 'visible') {
-          console.log('[Sync User] Tab visible, refreshing...');
-          syncUserChat(true);
-        }
-      };
-      window.addEventListener('visibilitychange', handleVisibility);
-      return () => window.removeEventListener('visibilitychange', handleVisibility);
-    }, [syncUserChat]);
-
-    // Re-sync when socket reconnects
-    useEffect(() => {
-      if (isConnected) {
-        console.log('[Sync User] Socket reconnected, refreshing...');
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Sync User] Tab visible, refreshing...');
         syncUserChat(true);
       }
-    }, [isConnected, syncUserChat]);
+    };
+    window.addEventListener('visibilitychange', handleVisibility);
+    return () => window.removeEventListener('visibilitychange', handleVisibility);
+  }, [syncUserChat]);
+
+  // Re-sync when socket reconnects
+  useEffect(() => {
+    if (isConnected) {
+      console.log('[Sync User] Socket reconnected, refreshing...');
+      syncUserChat(true);
+    }
+  }, [isConnected, syncUserChat]);
+
 
 
   useEffect(() => {
