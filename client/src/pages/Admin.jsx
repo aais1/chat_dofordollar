@@ -666,7 +666,7 @@ export default function Admin() {
   let filtered = chats.filter(c => {
     const matchesSearch = c.userName?.toLowerCase().includes(search.toLowerCase()) || c.userPhone?.includes(search);
     const matchesLabel = activeLabel ? c.labels?.some(l => l.id === activeLabel) : true;
-    const matchesUnread = onlyUnread ? c.unreadCount > 0 : true;
+    const matchesUnread = onlyUnread ? c.unreadCount > 1 : true;
     const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
     
     return matchesSearch && matchesLabel && matchesUnread && matchesArchive;
