@@ -1,6 +1,6 @@
 import { db } from '../config/db.js';
 import { statuses, statusViews, users } from '../models/schema.js';
-import { eq, gt, sql } from 'drizzle-orm';
+import { eq, gt, sql, and } from 'drizzle-orm';
 
 // POST /api/statuses
 export const createStatus = async (req, res) => {
@@ -99,7 +99,7 @@ export const recordView = async (req, res) => {
     const viewerId = req.user.id;
 
     const [existing] = await db.select().from(statusViews)
-      .where(eq(statusViews.statusId, statusId));
+      .where(and(eq(statusViews.statusId, statusId), eq(statusViews.viewerId, viewerId)));
 
     if (!existing) {
       await db.insert(statusViews).values({ statusId, viewerId });
