@@ -53,7 +53,7 @@ function ChatRow({ chat, selected, onClick }) {
       <div className="flex-1 min-w-0 text-left">
         <div className="flex justify-between items-baseline mb-0.5">
           <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{chat.userName}</p>
-          <span className={`text-[11px] flex-shrink-0 ml-1 ${unread > 0 ? 'text-green-500 font-bold' : 'text-gray-400'}`}>
+          <span className={`text-[11px] flex-shrink-0 ml-1 ${unread > 1 ? 'text-green-500 font-bold' : 'text-gray-400'}`}>
             {formatChatDate(chat.lastMessageAt)}
           </span>
         </div>
