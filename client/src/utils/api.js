@@ -19,7 +19,10 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Avoid hard reload if we are already on a login page
+      if (!globalThis.location.pathname.includes('/login')) {
+        globalThis.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }
