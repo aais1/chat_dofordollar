@@ -61,7 +61,7 @@ function ChatRow({ chat, selected, onClick }) {
           <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]">
              {chat.userIsBlocked ? <span className="text-red-500">🚫 Blocked</span> : (chat.lastMessage || 'No messages')}
           </p>
-          {unreadCount > 1 && (
+          {unread > 0 && (
             <span className="ml-2 flex-shrink-0 w-3 h-3 rounded-full bg-green-500 ring-2 ring-white dark:ring-black" aria-hidden="true" />
           )}
         </div>
