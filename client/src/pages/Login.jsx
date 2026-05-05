@@ -32,7 +32,9 @@ export default function Login() {
       await login(phone, pin);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      const errorMsg = err.response?.data?.message || 'Login failed - User not found or wrong PIN';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
