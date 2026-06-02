@@ -6,6 +6,25 @@ import { Check, CheckCheck, MoreVertical, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api.js';
 
+function renderTextWithLinks(text) {
+  // Split keeps captured groups at odd indices
+  const parts = text.split(/(https?:\/\/[^\s]+|whatsapp:\/\/[^\s]+)/gi);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline break-all text-blue-500 dark:text-blue-400"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {part}
+      </a>
+    ) : part
+  );
+}
+
 /**
  * MessageBubble
  *
@@ -179,7 +198,7 @@ export default function MessageBubble({ msg, root }) {
 
         {msg.content && (
           <p className="text-[14px] leading-[1.4] text-black dark:text-white break-words whitespace-pre-wrap px-0.5 font-normal pr-4">
-            {msg.content}
+            {renderTextWithLinks(msg.content)}
           </p>
         )}
 
