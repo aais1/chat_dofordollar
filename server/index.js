@@ -104,4 +104,15 @@ httpServer.listen(PORT, async () => {
   } catch (err) {
     console.error('❌ Database initialization error:', err);
   }
+
+  // Auto-migrate: per-admin isolation columns for welcome_messages and labels
+  try {
+    await db.execute(sql`ALTER TABLE welcome_messages ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id)`);
+    await db.execute(sql`ALTER TABLE labels ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id)`);
+    await db.execute(sql`ALTER TABLE labels DROP CONSTRAINT IF EXISTS labels_name_key`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS labels_name_admin_idx ON labels (name, admin_id)`);
+    console.log('✅ Database: per-admin isolation columns verified.');
+  } catch (err) {
+    console.error('❌ Database per-admin migration error:', err);
+  }
 });

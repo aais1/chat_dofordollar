@@ -30,6 +30,25 @@ async function migrate() {
     `;
     console.log('✅ Index "push_sub_user_id_idx" created or already exists.');
 
+    // Per-admin welcome messages
+    await sql`
+      ALTER TABLE welcome_messages ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id);
+    `;
+    console.log('✅ Column "admin_id" added to "welcome_messages".');
+
+    // Per-admin labels
+    await sql`
+      ALTER TABLE labels ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id);
+    `;
+    console.log('✅ Column "admin_id" added to "labels".');
+
+    // Replace global name uniqueness with per-admin uniqueness
+    await sql`ALTER TABLE labels DROP CONSTRAINT IF EXISTS labels_name_key;`;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS labels_name_admin_idx ON labels (name, admin_id);
+    `;
+    console.log('✅ Unique index "labels_name_admin_idx" created.');
+
     console.log('🎉 Migration completed successfully!');
   } catch (err) {
     console.error('❌ Migration failed:', err);

@@ -1,5 +1,5 @@
 import { db } from '../config/db.js';
-import { statuses, statusViews, users } from '../models/schema.js';
+import { statuses, statusViews, users, chats } from '../models/schema.js';
 import { eq, gt, sql, and } from 'drizzle-orm';
 
 // POST /api/statuses
@@ -35,6 +35,20 @@ export const createStatus = async (req, res) => {
 export const getStatuses = async (req, res) => {
   try {
     const now = new Date();
+
+    // Determine which admin's statuses to show
+    let adminId;
+    if (req.user.role === 'admin') {
+      adminId = req.user.id;
+    } else {
+      const [chat] = await db.select({ adminId: chats.adminId }).from(chats).where(eq(chats.userId, req.user.id));
+      adminId = chat?.adminId;
+    }
+
+    const whereClause = adminId
+      ? and(gt(statuses.expiryTime, now), eq(statuses.userId, adminId))
+      : gt(statuses.expiryTime, now);
+
     const activeStatuses = await db
       .select({
         id: statuses.id,
@@ -54,7 +68,7 @@ export const getStatuses = async (req, res) => {
       })
       .from(statuses)
       .leftJoin(users, eq(statuses.userId, users.id))
-      .where(gt(statuses.expiryTime, now));
+      .where(whereClause);
 
     // Attach isViewed flag per status for the current user
     const statusIds = activeStatuses.map(s => s.id);
@@ -118,7 +132,7 @@ export const recordView = async (req, res) => {
 export const deleteStatus = async (req, res) => {
   try {
     const { statusId } = req.params;
-    await db.delete(statuses).where(eq(statuses.id, parseInt(statusId)));
+    await db.delete(statuses).where(and(eq(statuses.id, parseInt(statusId)), eq(statuses.userId, req.user.id)));
     res.json({ success: true });
   } catch (err) {
     console.error('deleteStatus error:', err);

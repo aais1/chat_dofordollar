@@ -1,6 +1,6 @@
 import { db } from '../config/db.js';
 import { labels, chatLabels } from '../models/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 // Generate a random bright color for labels
 const generateColor = () => {
@@ -11,7 +11,7 @@ const generateColor = () => {
 // GET /api/labels
 export const getLabels = async (req, res) => {
   try {
-    const allLabels = await db.select().from(labels).orderBy(labels.createdAt);
+    const allLabels = await db.select().from(labels).where(eq(labels.adminId, req.user.id)).orderBy(labels.createdAt);
     res.json({ labels: allLabels });
   } catch (err) {
     console.error('getLabels error:', err);
@@ -26,8 +26,8 @@ export const createLabel = async (req, res) => {
     
     if (!name) return res.status(400).json({ message: 'Label name is required' });
 
-    // Check if label exists
-    const existing = await db.select().from(labels).where(eq(labels.name, name));
+    // Check if label exists for this admin
+    const existing = await db.select().from(labels).where(and(eq(labels.name, name), eq(labels.adminId, req.user.id)));
     let labelId;
 
     if (existing.length > 0) {
@@ -35,6 +35,7 @@ export const createLabel = async (req, res) => {
     } else {
       const [newLabel] = await db.insert(labels).values({
         name,
+        adminId: req.user.id,
         color: generateColor(),
       }).returning();
       labelId = newLabel.id;
@@ -103,7 +104,7 @@ export const toggleChatLabel = async (req, res) => {
 export const deleteLabel = async (req, res) => {
   try {
     const { labelId } = req.params;
-    await db.delete(labels).where(eq(labels.id, parseInt(labelId)));
+    await db.delete(labels).where(and(eq(labels.id, parseInt(labelId)), eq(labels.adminId, req.user.id)));
     res.json({ success: true });
   } catch (err) {
     console.error('deleteLabel error:', err);

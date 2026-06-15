@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db } from '../config/db.js';
 import { users, chats, messages, welcomeMessages } from '../models/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 const signToken = (userId, role) =>
   jwt.sign({ userId, role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
@@ -43,8 +43,9 @@ export const signup = async (req, res) => {
         unreadCount: 0,
       }).returning();
 
-      // Send welcome message
-      const [welcome] = await db.select().from(welcomeMessages).where(eq(welcomeMessages.isActive, true));
+      // Send this admin's welcome message
+      const [welcome] = await db.select().from(welcomeMessages)
+        .where(and(eq(welcomeMessages.isActive, true), eq(welcomeMessages.adminId, admin.id)));
       const welcomeText = welcome?.message || 'Welcome! How can we help you today?';
 
       await db.insert(messages).values({

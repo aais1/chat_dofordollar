@@ -92,6 +92,7 @@ export const statusViews = pgTable('status_views', {
 // Welcome messages table
 export const welcomeMessages = pgTable('welcome_messages', {
   id:        serial('id').primaryKey(),
+  adminId:   integer('admin_id').references(() => users.id),
   message:   text('message').notNull(),
   isActive:  boolean('is_active').default(true).notNull(),
   updatedBy: integer('updated_by').references(() => users.id),
@@ -101,10 +102,13 @@ export const welcomeMessages = pgTable('welcome_messages', {
 // Labels table
 export const labels = pgTable('labels', {
   id:        serial('id').primaryKey(),
-  name:      varchar('name', { length: 50 }).notNull().unique(),
+  adminId:   integer('admin_id').references(() => users.id),
+  name:      varchar('name', { length: 50 }).notNull(),
   color:     varchar('color', { length: 20 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  nameAdminIdx: uniqueIndex('labels_name_admin_idx').on(table.name, table.adminId),
+}));
 
 // Chat labels association table
 export const chatLabels = pgTable('chat_labels', {

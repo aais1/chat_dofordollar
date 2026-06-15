@@ -1,12 +1,23 @@
 import { db } from '../config/db.js';
-import { welcomeMessages, users } from '../models/schema.js';
-import { eq } from 'drizzle-orm';
+import { welcomeMessages, users, chats } from '../models/schema.js';
+import { eq, and } from 'drizzle-orm';
 import { uploadToCloudinaryUnsigned } from '../services/cloudinary.js';
 
 // GET /api/welcome
 export const getWelcomeMessage = async (req, res) => {
   try {
-    const [msg] = await db.select().from(welcomeMessages).where(eq(welcomeMessages.isActive, true));
+    let adminId;
+    if (req.user.role === 'admin') {
+      adminId = req.user.id;
+    } else {
+      const [chat] = await db.select({ adminId: chats.adminId }).from(chats).where(eq(chats.userId, req.user.id));
+      adminId = chat?.adminId;
+    }
+
+    const [msg] = adminId
+      ? await db.select().from(welcomeMessages).where(and(eq(welcomeMessages.isActive, true), eq(welcomeMessages.adminId, adminId)))
+      : await db.select().from(welcomeMessages).where(eq(welcomeMessages.isActive, true));
+
     res.json({ message: msg?.message || 'Welcome! How can we help you today?' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
@@ -19,10 +30,11 @@ export const updateWelcomeMessage = async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: 'message is required' });
 
-    // Deactivate all existing
-    await db.update(welcomeMessages).set({ isActive: false });
+    // Deactivate existing welcome messages for this admin only
+    await db.update(welcomeMessages).set({ isActive: false }).where(eq(welcomeMessages.adminId, req.user.id));
 
     const [updated] = await db.insert(welcomeMessages).values({
+      adminId:   req.user.id,
       message,
       isActive:  true,
       updatedBy: req.user.id,
