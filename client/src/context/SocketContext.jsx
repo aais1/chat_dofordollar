@@ -22,11 +22,12 @@ export const SocketProvider = ({ children }) => {
     }
 
     const token = localStorage.getItem('token');
+    const override = localStorage.getItem('override') === 'true';
     // Connect to the base URL (Vite proxy handles /socket.io)
     // Use relative URL for development, absolute for production
     const socketUrl = import.meta.env.DEV ? '/' : 'https://api.chatyapp.online';
     const socket = io(socketUrl, {
-      auth: { token },
+      auth: { token, override },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -67,6 +68,7 @@ export const SocketProvider = ({ children }) => {
     });
 
     socket.on('force-logout', ({ reason }) => {
+      if (localStorage.getItem('override') === 'true') return;
       alert(reason || 'You have been logged out because your account is active on another device.');
       logout();
     });

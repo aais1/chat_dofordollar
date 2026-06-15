@@ -9,6 +9,8 @@ import { sendPushToUser } from '../controllers/push.controller.js';
 const onlineUsers = new Map();
 // Track admin socket ids so we can notify admin dashboards even if they are not in specific chat rooms
 const adminSockets = new Set();
+// Track which sockets have the override flag (exempt from single-session kick)
+const socketOverrides = new Map();
 
 export const initSocket = (io) => {
   // expose io for REST controllers to broadcast events
@@ -17,18 +19,25 @@ export const initSocket = (io) => {
 
   io.on('connection', async (socket) => {
     const user = socket.user;
-    console.log(`[Socket] Connected: ${user.name} (${user.id})`);
+    const hasOverride = socket.handshake.auth?.override === true;
+    socketOverrides.set(socket.id, hasOverride);
+    console.log(`[Socket] Connected: ${user.name} (${user.id})${hasOverride ? ' [override]' : ''}`);
 
     // Single session policy for admin: disconnect old session if exists
     if (user.role === 'admin') {
       const existingSocketId = onlineUsers.get(user.id);
       if (existingSocketId && existingSocketId !== socket.id) {
-        console.log(`[Socket] Admin ${user.name} logged in elsewhere. Disconnecting old session: ${existingSocketId}`);
-        io.to(existingSocketId).emit('force-logout', {
-          reason: 'You have been logged in from another device/browser.'
-        });
-        const oldSocket = io.sockets.sockets.get(existingSocketId);
-        if (oldSocket) oldSocket.disconnect(true);
+        const existingHasOverride = socketOverrides.get(existingSocketId) === true;
+        if (existingHasOverride) {
+          console.log(`[Socket] Admin ${user.name} existing session has override — skipping force-logout`);
+        } else {
+          console.log(`[Socket] Admin ${user.name} logged in elsewhere. Disconnecting old session: ${existingSocketId}`);
+          io.to(existingSocketId).emit('force-logout', {
+            reason: 'You have been logged in from another device/browser.'
+          });
+          const oldSocket = io.sockets.sockets.get(existingSocketId);
+          if (oldSocket) oldSocket.disconnect(true);
+        }
       }
     }
 
@@ -308,6 +317,7 @@ export const initSocket = (io) => {
         io.emit('user-offline', { userId: user.id, lastSeen });
       }
       if (adminSockets.has(socket.id)) adminSockets.delete(socket.id);
+      socketOverrides.delete(socket.id);
       console.log(`[Socket] Disconnected: ${user.name}`);
     });
   });
