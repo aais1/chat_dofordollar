@@ -59,7 +59,7 @@ export const getAllChats = async (req, res) => {
       })
       .from(chats)
       .leftJoin(users, eq(chats.userId, users.id))
-      .where(eq(chats.isActive, true))
+      .where(and(eq(chats.isActive, true), eq(chats.adminId, req.user.id)))
       .orderBy(desc(chats.isPinned), desc(chats.lastMessageAt))
       .limit(limit)
       .offset(skip);
@@ -107,7 +107,9 @@ export const getMessages = async (req, res) => {
     const chat = await db.select().from(chats).where(eq(chats.id, parseInt(chatId)));
     if (!chat.length) return res.status(404).json({ message: 'Chat not found' });
 
-    // Authorization: user can only access their own chat
+    // Authorization: user can only access their own chat; admin can only access their assigned chats
+    if (req.user.role === 'admin' && chat[0].adminId !== req.user.id)
+      return res.status(403).json({ message: 'Access denied' });
     if (req.user.role !== 'admin' && chat[0].userId !== req.user.id)
       return res.status(403).json({ message: 'Access denied' });
 
@@ -149,6 +151,10 @@ export const sendMessage = async (req, res) => {
 
     const [chat] = await db.select().from(chats).where(eq(chats.id, parseInt(chatId)));
     if (!chat) return res.status(404).json({ message: 'Chat not found' });
+
+    // Admin can only send messages in their own chats
+    if (req.user.role === 'admin' && chat.adminId !== req.user.id)
+      return res.status(403).json({ message: 'Access denied' });
 
     // Determine receiver
     const receiverId = req.user.role === 'admin' ? chat.userId : chat.adminId;
@@ -195,7 +201,8 @@ export const sendMessage = async (req, res) => {
           }
         } catch (e) { console.error('direct notify error:', e); }
         try {
-          for (const adminSocketId of adminSockets) {
+          const chatAdminSockets = adminSockets.get(chat.adminId) || new Set();
+          for (const adminSocketId of chatAdminSockets) {
             io.to(adminSocketId).emit('receive-message', { ...msg, senderName: req.user.name });
           }
         } catch (e) { console.error('notify admins error (rest):', e); }
@@ -252,6 +259,9 @@ export const markAsRead = async (req, res) => {
 export const deleteChat = async (req, res) => {
   try {
     const { chatId } = req.params;
+    const [chat] = await db.select().from(chats).where(eq(chats.id, parseInt(chatId)));
+    if (!chat) return res.status(404).json({ message: 'Chat not found' });
+    if (chat.adminId !== req.user.id) return res.status(403).json({ message: 'Access denied' });
     await db.delete(messages).where(eq(messages.chatId, parseInt(chatId)));
     await db.update(chats).set({ 
       lastMessage: null, 
@@ -271,8 +281,9 @@ export const deleteChat = async (req, res) => {
 export const togglePin = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const [chat] = await db.select({ isPinned: chats.isPinned }).from(chats).where(eq(chats.id, parseInt(chatId)));
+    const [chat] = await db.select({ isPinned: chats.isPinned, adminId: chats.adminId }).from(chats).where(eq(chats.id, parseInt(chatId)));
     if (!chat) return res.status(404).json({ message: 'Chat not found' });
+    if (chat.adminId !== req.user.id) return res.status(403).json({ message: 'Access denied' });
     
     await db.update(chats).set({ isPinned: !chat.isPinned }).where(eq(chats.id, parseInt(chatId)));
     res.json({ success: true, isPinned: !chat.isPinned });
@@ -286,8 +297,9 @@ export const togglePin = async (req, res) => {
 export const toggleArchive = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const [chat] = await db.select({ isArchived: chats.isArchived }).from(chats).where(eq(chats.id, parseInt(chatId)));
+    const [chat] = await db.select({ isArchived: chats.isArchived, adminId: chats.adminId }).from(chats).where(eq(chats.id, parseInt(chatId)));
     if (!chat) return res.status(404).json({ message: 'Chat not found' });
+    if (chat.adminId !== req.user.id) return res.status(403).json({ message: 'Access denied' });
     
     await db.update(chats).set({ isArchived: !chat.isArchived }).where(eq(chats.id, parseInt(chatId)));
     res.json({ success: true, isArchived: !chat.isArchived });
@@ -303,6 +315,9 @@ export const deleteMessage = async (req, res) => {
     const { messageId } = req.params;
     const [msg] = await db.select().from(messages).where(eq(messages.id, parseInt(messageId)));
     if (!msg) return res.status(404).json({ message: 'Message not found' });
+
+    const [msgChat] = await db.select().from(chats).where(eq(chats.id, msg.chatId));
+    if (msgChat && msgChat.adminId !== req.user.id) return res.status(403).json({ message: 'Access denied' });
 
     await db.delete(messages).where(eq(messages.id, parseInt(messageId)));
 

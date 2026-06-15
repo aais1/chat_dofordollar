@@ -697,7 +697,7 @@ export default function Admin() {
     <div className="flex h-screen overflow-hidden font-sans bg-[var(--bg)] relative">
       {/* 1. NAV RAIL (Sidebar on Desktop, Bottom Bar on Mobile) */}
       <div className={`${(selectedChat && !sidebarOpen) ? 'hidden md:flex' : 'flex'} fixed bottom-0 left-0 right-0 h-16 md:relative md:h-screen md:w-16 flex md:flex-col items-center justify-around md:justify-start py-0 md:py-4 gap-0 md:gap-4 bg-gray-100 dark:bg-[#111B21] border-t md:border-t-0 md:border-r border-[#2A3942] z-30 transition-all duration-300`}>
-         <div className="hidden md:flex w-10 h-10 rounded-full bg-green-500 items-center justify-center text-[#111B21] font-black mb-4">AD</div>
+         <div className="hidden md:flex w-10 h-10 rounded-full bg-green-500 items-center justify-center text-[#111B21] font-black mb-4">{user.name?.substring(0,2).toUpperCase()}</div>
          <button onClick={() => setActiveTab('chats')} className={`flex-1 md:flex-none p-3 rounded-xl flex flex-col md:block items-center gap-1 ${activeTab === 'chats' ? 'bg-gray-200 dark:bg-[#2A3942] text-green-500' : 'text-gray-500'}`}>
             <MessageCircle size={24}/>
             <span className="text-[10px] md:hidden font-bold">Chats</span>
@@ -727,7 +727,7 @@ export default function Admin() {
          {activeTab === 'chats' && (
            <>
               <div className="flex items-center justify-between px-4 py-4 pt-6">
-                 <h2 className="text-2xl font-bold dark:text-white">Admin</h2>
+                 <h2 className="text-2xl font-bold dark:text-white">{user.name}</h2>
                  {/* <button className="p-2 dark:text-gray-400"><Filter size={18}/></button> */}
               </div>
               <div className="px-4 mb-2">

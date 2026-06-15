@@ -31,9 +31,10 @@ export const signup = async (req, res) => {
       role: 'user',
     }).returning();
 
-    // Find admin
-    const [admin] = await db.select().from(users).where(eq(users.role, 'admin'));
-    if (admin) {
+    // Find all admins and distribute new users round-robin
+    const admins = await db.select().from(users).where(eq(users.role, 'admin'));
+    if (admins.length > 0) {
+      const admin = admins[newUser.id % admins.length];
       // Create chat for new user
       const [chat] = await db.insert(chats).values({
         userId: newUser.id,
@@ -103,24 +104,23 @@ export const adminLogin = async (req, res) => {
     const { email, password, phone, pin } = req.body;
 
     let admin;
-    // Allow a hardcoded admin email/password for development
-    const HARDCODED_ADMIN_EMAIL = 'admin@chatapp.com';
-    const HARDCODED_ADMIN_PASSWORD = 'qwerty12';
+    const HARDCODED_ADMINS = [
+      { email: 'admin@chatapp.com',  password: 'qwerty12',  name: 'Admin 1', phone: process.env.ADMIN_PHONE  || '+923000000000' },
+      { email: 'admin2@chatapp.com', password: 'admin2pass', name: 'Admin 2', phone: process.env.ADMIN2_PHONE || '+923000000001' },
+    ];
 
     if (email && password) {
-      // If credentials match the hardcoded pair, ensure an admin user exists (create if necessary)
-      if (email === HARDCODED_ADMIN_EMAIL && String(password) === HARDCODED_ADMIN_PASSWORD) {
-        // Try to find existing admin in DB
-        const [found] = await db.select().from(users).where(eq(users.email, email));
+      const hardcoded = HARDCODED_ADMINS.find(a => a.email === email && String(password) === a.password);
+      if (hardcoded) {
+        const [found] = await db.select().from(users).where(eq(users.email, hardcoded.email));
         if (found && found.role === 'admin') {
           admin = found;
         } else if (!found) {
-          // Create admin user with the hardcoded credentials
           const hashed = await bcrypt.hash(String(password), 10);
           const [created] = await db.insert(users).values({
-            name: 'Admin',
-            phone: process.env.ADMIN_PHONE || '+923000000000',
-            email: HARDCODED_ADMIN_EMAIL,
+            name: hardcoded.name,
+            phone: hardcoded.phone,
+            email: hardcoded.email,
             pin: hashed,
             role: 'admin',
           }).returning();

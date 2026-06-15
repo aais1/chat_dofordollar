@@ -7,8 +7,8 @@ import { sendPushToUser } from '../controllers/push.controller.js';
 
 // Map userId -> socketId for online tracking
 const onlineUsers = new Map();
-// Track admin socket ids so we can notify admin dashboards even if they are not in specific chat rooms
-const adminSockets = new Set();
+// Map adminId -> Set<socketId> so each admin only receives notifications for their own chats
+const adminSockets = new Map();
 // Track which sockets have the override flag (exempt from single-session kick)
 const socketOverrides = new Map();
 
@@ -56,7 +56,8 @@ export const initSocket = (io) => {
       // Admin: notify presence
       console.log(`[Socket] Admin ${user.name} connected`);
       io.emit('admin-online');
-      adminSockets.add(socket.id);
+      if (!adminSockets.has(user.id)) adminSockets.set(user.id, new Set());
+      adminSockets.get(user.id).add(socket.id);
 
       // Mark undelivered messages as delivered now that admin is online
       try {
@@ -93,6 +94,10 @@ export const initSocket = (io) => {
         const { chatId, content, messageType = 'text', mediaUrl } = data;
         const [chat] = await db.select().from(chats).where(eq(chats.id, chatId));
         if (!chat) return ack?.({ error: 'Chat not found' });
+
+        // Admin can only send in their own chats
+        if (user.role === 'admin' && chat.adminId !== user.id)
+          return ack?.({ error: 'Access denied' });
 
         // Block check
         if (user.role === 'user') {
@@ -172,10 +177,10 @@ export const initSocket = (io) => {
           });
         }
 
-        // Notify all admin sockets so the chat list updates in real time
+        // Notify only this chat's admin sockets so the chat list updates in real time
         try {
-          for (const adminSocketId of adminSockets) {
-            // Avoid double-emit if admin is in the room already
+          const chatAdminSockets = adminSockets.get(chat.adminId) || new Set();
+          for (const adminSocketId of chatAdminSockets) {
             const adminSock = io.sockets.sockets.get(adminSocketId);
             if (!adminSock?.rooms?.has(`chat:${chatId}`)) {
               io.to(adminSocketId).emit('receive-message', { ...msg, senderName: user.name });
@@ -262,6 +267,12 @@ export const initSocket = (io) => {
           return;
         }
 
+        const [msgChat] = await db.select().from(chats).where(eq(chats.id, msg.chatId));
+        if (msgChat && msgChat.adminId !== user.id) {
+          ack?.({ error: 'Access denied' });
+          return;
+        }
+
         await db.delete(messages).where(eq(messages.id, messageId));
 
         const [lastMsg] = await db
@@ -294,7 +305,11 @@ export const initSocket = (io) => {
     // -------------------------------------------------------------------
     // join-chat (admin joins a specific user room on demand)
     // -------------------------------------------------------------------
-    socket.on('join-chat', ({ chatId }) => {
+    socket.on('join-chat', async ({ chatId }) => {
+      if (user.role === 'admin') {
+        const [chat] = await db.select({ adminId: chats.adminId }).from(chats).where(eq(chats.id, chatId));
+        if (!chat || chat.adminId !== user.id) return;
+      }
       console.log(`[Socket] ${user.name} joining room chat:${chatId}`);
       socket.join(`chat:${chatId}`);
     });
@@ -316,7 +331,13 @@ export const initSocket = (io) => {
         await db.update(users).set({ lastSeen }).where(eq(users.id, user.id));
         io.emit('user-offline', { userId: user.id, lastSeen });
       }
-      if (adminSockets.has(socket.id)) adminSockets.delete(socket.id);
+      if (user.role === 'admin') {
+        const myAdminSockets = adminSockets.get(user.id);
+        if (myAdminSockets) {
+          myAdminSockets.delete(socket.id);
+          if (myAdminSockets.size === 0) adminSockets.delete(user.id);
+        }
+      }
       socketOverrides.delete(socket.id);
       console.log(`[Socket] Disconnected: ${user.name}`);
     });
