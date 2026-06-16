@@ -31,10 +31,10 @@ export const signup = async (req, res) => {
       role: 'user',
     }).returning();
 
-    // Temporarily assign all new users to the main admin (round-robin distribution disabled)
+    // Distribute new users round-robin across all admins
     const admins = await db.select().from(users).where(eq(users.role, 'admin'));
     if (admins.length > 0) {
-      const admin = admins.find(a => a.email === 'admin@chatapp.com') || admins[0];
+      const admin = admins[newUser.id % admins.length];
       // Create chat for new user
       const [chat] = await db.insert(chats).values({
         userId: newUser.id,
