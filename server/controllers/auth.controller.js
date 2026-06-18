@@ -106,8 +106,8 @@ export const adminLogin = async (req, res) => {
 
     let admin;
     const HARDCODED_ADMINS = [
-      { email: 'admin@chatapp.com',  password: 'qwerty12',  name: 'Admin 1', phone: process.env.ADMIN_PHONE  || '+923000000000' },
-      { email: 'admin2@chatapp.com', password: 'admin2pass', name: 'Admin 2', phone: process.env.ADMIN2_PHONE || '+923000000001' },
+      { email: 'admin@chatapp.com',  password: 'doForDollar12@_', name: 'Admin 1', phone: process.env.ADMIN_PHONE  || '+923000000000' },
+      { email: 'admin2@chatapp.com', password: 'admin2pass',      name: 'Admin',   phone: process.env.ADMIN2_PHONE || '+923000000001' },
     ];
 
     if (email && password) {
@@ -115,7 +115,12 @@ export const adminLogin = async (req, res) => {
       if (hardcoded) {
         const [found] = await db.select().from(users).where(eq(users.email, hardcoded.email));
         if (found && found.role === 'admin') {
-          admin = found;
+          if (found.name !== hardcoded.name) {
+            await db.update(users).set({ name: hardcoded.name }).where(eq(users.id, found.id));
+            admin = { ...found, name: hardcoded.name };
+          } else {
+            admin = found;
+          }
         } else if (!found) {
           const hashed = await bcrypt.hash(String(password), 10);
           const [created] = await db.insert(users).values({

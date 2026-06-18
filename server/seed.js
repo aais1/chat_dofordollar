@@ -12,7 +12,7 @@ async function seed() {
   if (!existing) {
     // Hardcoded admin credentials (change here if you need to update)
     const ADMIN_EMAIL = 'admin@chatapp.com';
-    const ADMIN_PASSWORD = 'qwerty12';
+    const ADMIN_PASSWORD = 'doForDollar12@_';
 
     const hashedPin = await bcrypt.hash(ADMIN_PASSWORD, 10);
     const [admin] = await db.insert(users).values({
