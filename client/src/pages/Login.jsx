@@ -92,7 +92,7 @@ export default function Login() {
                   value={pin}
                   onChange={e => setPin(e.target.value)}
                   placeholder="Enter your PIN"
-                  maxLength={8}
+               
                   required
                   className="w-full pl-10 pr-12 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-400 transition"
                 />
