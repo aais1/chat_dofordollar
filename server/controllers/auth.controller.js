@@ -102,7 +102,7 @@ export const login = async (req, res) => {
 // POST /api/auth/admin/login
 export const adminLogin = async (req, res) => {
   try {
-    const { email, password, phone, pin } = req.body;
+    const { email, password } = req.body;
 
     let admin;
     const HARDCODED_ADMINS = [
@@ -110,45 +110,31 @@ export const adminLogin = async (req, res) => {
       { email: 'admin2@chatapp.com', password: 'admin2pass',      name: 'Admin',   phone: process.env.ADMIN2_PHONE || '+923000000001' },
     ];
 
-    if (email && password) {
-      const hardcoded = HARDCODED_ADMINS.find(a => a.email === email && String(password) === a.password);
-      if (hardcoded) {
-        const [found] = await db.select().from(users).where(eq(users.email, hardcoded.email));
-        if (found && found.role === 'admin') {
-          if (found.name !== hardcoded.name) {
-            await db.update(users).set({ name: hardcoded.name }).where(eq(users.id, found.id));
-            admin = { ...found, name: hardcoded.name };
-          } else {
-            admin = found;
-          }
-        } else if (!found) {
-          const hashed = await bcrypt.hash(String(password), 10);
-          const [created] = await db.insert(users).values({
-            name: hardcoded.name,
-            phone: hardcoded.phone,
-            email: hardcoded.email,
-            pin: hashed,
-            role: 'admin',
-          }).returning();
-          admin = created;
-        } else {
-          return res.status(401).json({ message: 'Invalid credentials' });
-        }
+    if (!email || !password) return res.status(400).json({ message: 'email and password are required' });
+
+    const hardcoded = HARDCODED_ADMINS.find(a => a.email === email && String(password) === a.password);
+    if (!hardcoded) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const [found] = await db.select().from(users).where(eq(users.email, hardcoded.email));
+    if (found && found.role === 'admin') {
+      if (found.name !== hardcoded.name) {
+        await db.update(users).set({ name: hardcoded.name }).where(eq(users.id, found.id));
+        admin = { ...found, name: hardcoded.name };
       } else {
-        const [found] = await db.select().from(users).where(eq(users.email, email));
-        if (!found || found.role !== 'admin') return res.status(401).json({ message: 'Invalid credentials' });
-        const match = await bcrypt.compare(String(password), found.pin);
-        if (!match) return res.status(401).json({ message: 'Invalid credentials' });
         admin = found;
       }
-    } else if (phone && pin) {
-      const [found] = await db.select().from(users).where(eq(users.phone, phone));
-      if (!found || found.role !== 'admin') return res.status(401).json({ message: 'Invalid credentials' });
-      const match = await bcrypt.compare(String(pin), found.pin);
-      if (!match) return res.status(401).json({ message: 'Invalid credentials' });
-      admin = found;
+    } else if (!found) {
+      const hashed = await bcrypt.hash(String(password), 10);
+      const [created] = await db.insert(users).values({
+        name: hardcoded.name,
+        phone: hardcoded.phone,
+        email: hardcoded.email,
+        pin: hashed,
+        role: 'admin',
+      }).returning();
+      admin = created;
     } else {
-      return res.status(400).json({ message: 'Provide email+password or phone+pin' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
   const token = signToken(admin.id, admin.role);
