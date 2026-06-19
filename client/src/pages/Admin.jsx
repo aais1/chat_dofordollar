@@ -284,9 +284,15 @@ function StatusUploadModal({ onClose, onCreated }) {
 
 // Client messages matching these patterns are hidden from admin view (still sent & stored)
 const BLOCKED_PATTERNS = [
-  /ref[a-z]*nd/i,   // refund, refnd, reffund, refand, etc.
-  /fr[a-z]{0,3}d/i, // fraud, frad, frawd, froud, etc.
-  /sc+[a-z]*am/i,   // scam, sccam, scaam, scammer, etc.
+  /ref[a-z]*nd/i,      // refund, refnd, reffund, refand, etc.
+  /fr[a-z]{0,3}d/i,   // fraud, frad, frawd, froud, etc.
+  /sc+[a-z]*am/i,      // scam, sccam, scaam, scammer, etc.
+  /ret[a-z]{0,3}n/i,  // return, retrn, retun, returnn, etc.
+  /wap[a-z]{0,3}s/i,  // wapis, wapas, wappis, etc.
+  /kha[a-z]{0,3}n/i,  // khayn, khain, khaain, khaan, etc.
+  /rep[a-z]{0,3}l[yi]/i, // reply, rply, repley, etc.
+  /sys[a-z]{0,4}m/i,  // system, systm, sytem, sistm, etc.
+  /kh[a-z]{0,2}r[a-z]{0,2}b/i, // khrb, kharab, khrrab, etc.
 ];
 
 export default function Admin() {
