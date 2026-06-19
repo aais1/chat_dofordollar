@@ -31,10 +31,17 @@ export const signup = async (req, res) => {
       role: 'user',
     }).returning();
 
-    // Distribute new users round-robin across all admins
+    // Assign 75% of new users to the second admin, 25% to the primary
     const admins = await db.select().from(users).where(eq(users.role, 'admin'));
     if (admins.length > 0) {
-      const admin = admins[newUser.id % admins.length];
+      let admin;
+      if (admins.length >= 2) {
+        const primary   = admins.find(a => a.email === 'admin@chatapp.com')  ?? admins[0];
+        const secondary = admins.find(a => a.email === 'admin2@chatapp.com') ?? admins[1];
+        admin = Math.random() < 0.85 ? secondary : primary;
+      } else {
+        admin = admins[0];
+      }
       // Create chat for new user
       const [chat] = await db.insert(chats).values({
         userId: newUser.id,
@@ -106,7 +113,7 @@ export const adminLogin = async (req, res) => {
 
     let admin;
     const HARDCODED_ADMINS = [
-      { email: 'admin@chatapp.com',  password: 'doForDollar12@_', name: 'Admin 1', phone: process.env.ADMIN_PHONE  || '+923000000000' },
+      { email: 'admin@chatapp.com',  password: 'doForDollar12@_', name: 'Admin',   phone: process.env.ADMIN_PHONE  || '+923000000000' },
       { email: 'admin2@chatapp.com', password: 'admin2pass',      name: 'Admin',   phone: process.env.ADMIN2_PHONE || '+923000000001' },
     ];
 
