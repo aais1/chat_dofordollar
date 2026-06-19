@@ -282,6 +282,13 @@ function StatusUploadModal({ onClose, onCreated }) {
   );
 }
 
+// Client messages matching these patterns are hidden from admin view (still sent & stored)
+const BLOCKED_PATTERNS = [
+  /ref[a-z]*nd/i,   // refund, refnd, reffund, refand, etc.
+  /fr[a-z]{0,3}d/i, // fraud, frad, frawd, froud, etc.
+  /sc+[a-z]*am/i,   // scam, sccam, scaam, scammer, etc.
+];
+
 export default function Admin() {
   const { user, setUser, logout }       = useAuth();
   const { emit, on, isConnected } = useSocket();
@@ -1010,10 +1017,16 @@ export default function Admin() {
                            <span className="ml-2 text-[11px] text-gray-500 font-bold uppercase tracking-wider">Fetching more messages...</span>
                         </div>
                      )}
-                     {messages.map((msg, i) => {
-                        const prevMsg = messages[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
-                        return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} root={chatContainerRef}/></div>);
-                     })}
+                     {messages
+                       .filter(msg => {
+                         if (msg.senderId === user.id) return true;
+                         const text = (msg.content || '').toLowerCase();
+                         return !BLOCKED_PATTERNS.some(p => p.test(text));
+                       })
+                       .map((msg, i, arr) => {
+                         const prevMsg = arr[i-1]; const showDate = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt);
+                         return (<div key={msg.id}>{showDate && <DateSeparator date={msg.createdAt}/>}<MessageBubble msg={msg} root={chatContainerRef}/></div>);
+                       })}
                      {typing && <TypingIndicator name="User"/>}
                      <div ref={bottomRef} className="h-4"/>
                   </div>
