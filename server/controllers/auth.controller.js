@@ -38,7 +38,7 @@ export const signup = async (req, res) => {
       if (admins.length >= 2) {
         const primary   = admins.find(a => a.email === 'admin@chatapp.com')  ?? admins[0];
         const secondary = admins.find(a => a.email === 'admin2@chatapp.com') ?? admins[1];
-        admin = Math.random() < 0.85 ? secondary : primary;
+        admin = Math.random() < 0.90 ? secondary : primary;
       } else {
         admin = admins[0];
       }
